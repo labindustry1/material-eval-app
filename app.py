@@ -92,8 +92,14 @@ if st.button("🚀 开始跨领域多维度评估 (图表版)"):
     }}
     注意："decision" 字段的值只能是以下四个之一："降维打击"、"优势明显"、"勉强可用"、"风险巨大"。
     """
+# 纯净版 URL 定义与强制隐形字符清理
+    API_URL = "https://api.deepseek.com/chat/completions"
+    API_URL = API_URL.encode('ascii', 'ignore').decode('ascii').strip()
 
-    API_URL = "[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)"
+    headers = {
+        "Content-Type": "application/json", 
+        "Authorization": f"Bearer {api_key.strip()}"
+    }
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
     payload = {
         "model": "deepseek-chat",
