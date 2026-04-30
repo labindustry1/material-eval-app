@@ -3,19 +3,20 @@ import requests
 import json
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 # ================= UI 页面配置 =================
-st.set_page_config(page_title="AI 材料工程评估套件", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AI 工业级选材评估套件", layout="wide", initial_sidebar_state="expanded")
 
-st.title("🛡️ 全领域材料-应用映射评估引擎 (Cloud v5.0 Pro)")
-st.caption("基于 DeepSeek-V3 | 多维度切片分析 | 独立指标打分与靶向图表")
+st.title("🛡️ 全领域材料-应用映射评估引擎 (Enterprise v6.0)")
+st.caption("基于 DeepSeek-V3 | 零部件级下钻分析 | 动态/静态全维解析 | 加工成型白皮书")
 
-# ================= 侧边栏：全参数输入矩阵 =================
+# ================= 侧边栏：全参数输入 =================
 with st.sidebar:
     st.header("🌐 1. 选择评估领域")
     domain = st.selectbox(
         "下游目标行业",
-        ["机器人与工业自动化 (Robotics)", "航空航天与无人机 (Aerospace)", "生物医疗植入物 (Biomedical)"]
+        ["机器人与工业自动化", "航空航天与无人机", "生物医疗植入物", "新能源汽车结构件"]
     )
 
     st.header("📏 2. 核心力学数据 (必填)")
@@ -27,14 +28,13 @@ with st.sidebar:
     material_form = st.selectbox(
         "该材料的宏观表现形式",
         [
-         "高强纤维/长丝 (Fiber - 用于复合材料增强相或张拉索具)", 
-         "各向同性体块/浇铸件 (Bulk - 直接作为主承力结构)", 
-         "未知/未定 (系统将双向推演)"
+         "高强纤维/长丝 (Fiber - 复合材料增强相/张拉体系)", 
+         "各向同性体块/浇铸件 (Bulk - 整体主承力件)"
         ]
     )
 
     st.header("🧪 4. 跨领域选填指标")
-    with st.expander("➕ 物理与环境稳定性"):
+    with st.expander("展开输入高阶数据 (影响疲劳与加工分析)"):
         elongation = st.number_input("断裂伸长率 (%)", value=0.0)
         water_abs = st.number_input("饱和吸水率 (%)", value=0.0)
 
@@ -43,134 +43,133 @@ with st.sidebar:
 
 # ================= 主界面：评估逻辑 =================
 
-if st.button("🚀 生成多维度切片工程报告"):
+if st.button("🚀 生成工业级全景评估白皮书", type="primary"):
     if not api_key:
         st.warning("⚠️ 请配置 API Key。")
         st.stop()
 
-    # 构建带有多维切片要求的 JSON 结构指令
+    # 极端变态的系统指令：强迫 LLM 输出企业级结构的 JSON
     system_prompt = f"""
-    你是一位性格严苛的“材料首席科学家”。用户提供的数据（如 9600 MPa 强度）是已实现的绝对事实，禁止质疑。
-    当前参数：领域={domain}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}。
+    你是全球顶尖的材料科学与制造总工。用户输入的数据（如9600MPa）是绝对工程事实，禁止质疑。
+    目标领域：{domain}。材料形态：{material_form}。密度:{density}, 强度:{strength}, 模量:{modulus}。
     
-    你必须输出严格的 JSON 代码，不得包含 markdown 标记。结构必须严格如下：
+    【隐性专家指令】
+    如果形态为“纤维”且密度在1.3左右，你必须在【加工工艺】部分，像评估顶尖合成大分子/特种蛋白纤维一样，深度推演其在溶剂体系、凝固浴（如醇类/胺类双重凝固浴体系）湿法纺丝成型、以及与树脂基体复合（长丝缠绕/拉挤）时的关键技术壁垒和解决方案。
+
+    你必须只输出严谨的 JSON，绝对不要包含 markdown 代码块标记。JSON 结构必须完全如下：
     {{
       "executive_summary": {{
         "overall_score": 85,
-        "decision": "降维打击",
-        "radar_data": {{"力学极限": 100, "刚度形变": 60, "轻量化": 95, "环境加工": 50}}
+        "radar": {{"静态强度": 100, "动态疲劳": 40, "刚度形变": 60, "加工成型": 50, "环境抗性": 70}}
       }},
-      "dimensions": [
+      "component_mapping": [
+        {{"part": "零部件名称A(如:外壳蒙皮)", "suitability": "极度推荐", "reason": "具体力学匹配理由"}},
+        {{"part": "零部件名称B(如:主承力传动轴)", "suitability": "严禁使用", "reason": "具体失效风险(如剪切破坏)"}},
+        {{"part": "零部件名称C(如:轻量化连杆)", "suitability": "需结构补偿", "reason": "需要如何补偿"}}
+      ],
+      "dimensional_analysis": [
         {{
-          "tab_name": "💪 力学极限与承载",
-          "sub_score": 98,
-          "metric_name": "比强度 (MPa·cm³/g)",
-          "comparison_data": {{"航空铝7075": 178, "碳纤维T1000": 1875, "输入材料": {strength/density}}},
-          "analysis": "针对承重、防爆或拉伸极限的具体工程分析，结合数据说明优势或隐患。"
+          "dimension": "静态力学与极限承载",
+          "metrics": [
+            {{"name": "比强度", "value": 7384, "unit": "kN·m/kg", "benchmark": 200, "bench_name": "铝7075"}}
+          ],
+          "analysis": "200字深度解析，包含拉压弯剪的失效模式推演。"
         }},
         {{
-          "tab_name": "📐 刚度与形变控制",
-          "sub_score": 60,
-          "metric_name": "绝对模量 (GPa)",
-          "comparison_data": {{"航空铝7075": 71, "碳纤维T1000": 160, "输入材料": {modulus}}},
-          "analysis": "针对机械臂挠度、定位精度或支撑刚性的苛刻分析，必须指出模量带来的具体影响。"
-        }},
-        {{
-          "tab_name": "🪶 轻量化与效能",
-          "sub_score": 95,
-          "metric_name": "密度 (g/cm³)",
-          "comparison_data": {{"航空铝7075": 2.8, "碳纤维T1000": 1.6, "输入材料": {density}}},
-          "analysis": "分析在等体积或等强度替换下的减重比例，及其对电机负载/续航的价值。"
+          "dimension": "动态响应与形变控制",
+          "metrics": [
+            {{"name": "绝对模量", "value": 100, "unit": "GPa", "benchmark": 160, "bench_name": "T1000碳纤"}}
+          ],
+          "analysis": "200字深度解析，包含挠度、高频抑震、疲劳寿命预估。"
         }}
       ],
-      "engineering_decision": {{
-        "core_advantage": "一句话核心优势",
-        "core_weakness": "一句话致命短板",
-        "action_plan": "针对该形态材料的具体结构设计与成型建议"
+      "manufacturing_guide": {{
+        "primary_process": "推荐的主力成型工艺(如:双浴湿法纺丝+环氧树脂长丝缠绕)",
+        "process_steps": [
+          "步骤1的深度指导及参数控制建议",
+          "步骤2的深度指导及参数控制建议"
+        ],
+        "defect_risks": "容易出现的制造缺陷（如孔隙率高、皮芯结构不均、界面脱粘）及预防策略"
       }}
     }}
     """
 
     API_URL = "https://api.deepseek.com/chat/completions"
-    API_URL = API_URL.encode('ascii', 'ignore').decode('ascii').strip()
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
-    payload = {
-        "model": "deepseek-chat",
-        "messages": [{"role": "system", "content": system_prompt}],
-        "temperature": 0.1
-    }
+    payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.15}
 
-    with st.spinner(f"正在进行多维度矩阵切片与图表生成..."):
+    with st.spinner(f"正在进行分子级推演与全产业链制造评估，请稍候..."):
         try:
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+            response = requests.post(API_URL, headers=headers, json=payload, timeout=90)
             response.raise_for_status()
-            
             raw_text = response.json()['choices'][0]['message']['content']
             clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_json_str)
             
-            try:
-                data = json.loads(clean_json_str)
-            except json.JSONDecodeError:
-                st.error("模型数据解析失败，请重试。")
-                st.stop()
+            st.success("✅ 工业级全景评估白皮书生成完毕！")
             
-            # ================= UI 渲染：总览区 =================
-            st.success("✅ 多维度切片分析完成！")
-            summary = data.get("executive_summary", {})
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("综合工程评分", f"{summary.get('overall_score', 0)} / 100")
-            col2.metric("宏观应用判定", summary.get('decision', '未知'))
-            col3.metric("评估基准形态", material_form.split(" ")[0])
-            
-            # ================= UI 渲染：多维度深度切片 (选项卡) =================
-            st.markdown("### 🔍 工程师各维度下钻分析 (Drill-down Analysis)")
-            
-            dimensions = data.get("dimensions", [])
-            if dimensions:
-                # 动态生成选项卡
-                tabs = st.tabs([dim.get("tab_name", "维度") for dim in dimensions])
-                
-                for i, tab in enumerate(tabs):
-                    with tab:
-                        dim_data = dimensions[i]
-                        # 每个选项卡内部分为左右两列：左侧图表，右侧分析
-                        tab_col1, tab_col2 = st.columns([1.5, 1])
-                        
-                        with tab_col1:
-                            # 渲染该维度专属的条形图
-                            comp_data = dim_data.get("comparison_data", {})
-                            if comp_data:
-                                df_dim = pd.DataFrame({
-                                    "材料": list(comp_data.keys()),
-                                    "数值": list(comp_data.values())
-                                })
-                                fig_dim = px.bar(
-                                    df_dim, x="数值", y="材料", orientation='h',
-                                    title=f"核心指标对比: {dim_data.get('metric_name', '')}",
-                                    text_auto='.2s',
-                                    color="材料",
-                                    color_discrete_sequence=["#a6b8c7", "#5a6e7f", "#ff4b4b"] # 突出新材料
-                                )
-                                fig_dim.update_layout(showlegend=False, xaxis_title=dim_data.get('metric_name', ''))
-                                st.plotly_chart(fig_dim, use_container_width=True)
-                        
-                        with tab_col2:
-                            # 渲染该维度的独立评分与深度文本
-                            st.metric(label=f"{dim_data.get('tab_name').split(' ')[-1]} 子项评分", value=f"{dim_data.get('sub_score')}/100")
-                            st.info(dim_data.get("analysis", "暂无分析"))
-            
+            # ================= 1. 顶层看板 =================
+            col_score, col_radar = st.columns([1, 2])
+            with col_score:
+                st.metric("📊 综合工程评级 (Overall Score)", f"{data['executive_summary']['overall_score']} / 100")
+                st.info(f"**评估基准:** {domain} | {material_form.split(' ')[0]}")
+            with col_radar:
+                radar_data = data['executive_summary']['radar']
+                fig_radar = px.line_polar(
+                    pd.DataFrame(dict(r=list(radar_data.values()), theta=list(radar_data.keys()))),
+                    r='r', theta='theta', line_close=True, height=250
+                )
+                fig_radar.update_traces(fill='toself', line_color='#0068c9')
+                fig_radar.update_layout(margin=dict(l=20, r=20, t=20, b=20))
+                st.plotly_chart(fig_radar, use_container_width=True)
+
             st.markdown("---")
+
+            # ================= 2. 零部件级适用性地图 (Traffic Lights) =================
+            st.markdown(f"### 🧩 【{domain}】具体零部件适用性判定")
+            cols = st.columns(len(data.get("component_mapping", [])))
+            for i, comp in enumerate(data.get("component_mapping", [])):
+                with cols[i]:
+                    suitability = comp.get("suitability", "")
+                    color = "🟢" if "推荐" in suitability else "🔴" if "严禁" in suitability or "禁用" in suitability else "🟡"
+                    st.markdown(f"**{color} {comp.get('part')}**")
+                    st.caption(f"**判定:** {suitability}")
+                    st.write(comp.get("reason"))
+
+            st.markdown("---")
+
+            # ================= 3. 多维深度解析 (Tabs) =================
+            st.markdown("### 🔬 物理力学多维深度解析")
+            dims = data.get("dimensional_analysis", [])
+            tabs = st.tabs([d['dimension'] for d in dims])
             
-            # ================= UI 渲染：工程落地决策 =================
-            decision = data.get("engineering_decision", {})
-            st.markdown("### 🛠️ 首席总工最终决议")
-            dec_col1, dec_col2 = st.columns(2)
-            with dec_col1:
-                st.success(f"**🌟 核心优势：** {decision.get('core_advantage', '')}")
-                st.error(f"**⚠️ 致命短板：** {decision.get('core_weakness', '')}")
-            with dec_col2:
-                st.warning(f"**⚙️ 落地方案：** {decision.get('action_plan', '')}")
+            for i, tab in enumerate(tabs):
+                with tab:
+                    dim_data = dims[i]
+                    c1, c2 = st.columns([1, 1.5])
+                    with c1:
+                        for metric in dim_data.get('metrics', []):
+                            # 对比微型图表
+                            fig_bar = go.Figure()
+                            fig_bar.add_trace(go.Bar(y=[metric['name']], x=[metric['benchmark']], name=metric['bench_name'], orientation='h', marker_color='lightgray'))
+                            fig_bar.add_trace(go.Bar(y=[metric['name']], x=[metric['value']], name="新材料", orientation='h', marker_color='#ff2b2b'))
+                            fig_bar.update_layout(barmode='group', height=150, margin=dict(l=0, r=0, t=30, b=0), title=f"{metric['name']} ({metric['unit']})")
+                            st.plotly_chart(fig_bar, use_container_width=True)
+                    with c2:
+                        st.write(dim_data.get('analysis'))
+
+            st.markdown("---")
+
+            # ================= 4. 加工与制造指南 =================
+            st.markdown("### 🏭 制造工程与加工白皮书")
+            mfg = data.get("manufacturing_guide", {})
+            st.success(f"**推荐主工艺路线：** {mfg.get('primary_process')}")
+            
+            st.markdown("#### ⚙️ 关键工序与参数控制建议")
+            for step in mfg.get("process_steps", []):
+                st.markdown(f"- {step}")
+                
+            st.error(f"**⚠️ 致命缺陷预警及预防：**\n{mfg.get('defect_risks')}")
 
         except Exception as e:
-            st.error(f"云端评估请求失败: {str(e)}")
+            st.error(f"评估失败，可能由于大模型响应格式不规整。请重试。错误信息: {str(e)}")
