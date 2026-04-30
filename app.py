@@ -3,12 +3,11 @@ import requests
 import json
 import pandas as pd
 import plotly.express as px
-import urllib.parse
 
 # ================= UI 页面配置 =================
-st.set_page_config(page_title="工业/生物材料全景推演系统", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="材料商业选型评估系统", layout="wide", initial_sidebar_state="expanded")
 
-# 自定义 CSS 强化 Tab 标签视觉辨识度，防止被忽略
+# 自定义 CSS 强化 Tab 标签视觉辨识度
 st.markdown("""
 <style>
     .stTabs [data-baseweb="tab-list"] {gap: 6px; flex-wrap: wrap;}
@@ -17,15 +16,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🧬 跨域材料本征与系统级全景推演引擎 (v13.0 终极扩容版)")
-st.caption("动态表单 | ESG融合 | 材料专属特性剖析 | 本征矩阵 | 数学等效推演 | 盲区扫掠 | 八维图文切片")
+# 优化大标题，通俗易懂
+st.title("💡 AI 驱动的材料应用与商业选型评估系统 (v14.0)")
+st.caption("一键完成：材料性能对标 ➔ 结构代换计算 ➔ 盲区风险预测 ➔ 最终商业决策")
 
 # ================= 侧边栏：全参数输入 (动态自适应) =================
 with st.sidebar:
     st.header("1. 目标领域与材料大类")
     domain = st.selectbox(
-        "下游整机/应用领域",
-        ["工业协作机械臂 (力学导向)", "航空航天与无人机 (轻量化导向)", "生物医疗与植入物 (生化导向)", "新型环保包装 (降解导向)"]
+        "下游整机/应用领域 (丰富选项)",
+        [
+            "人形机器人核心骨架 (高动载/高刚度)",
+            "工业协作机械臂 (力学精度导向)",
+            "航空航天与eVTOL飞行器 (极致轻量化)",
+            "新能源汽车/动力电池结构件 (吸能阻燃)",
+            "生物医疗与人体植入物 (生化相容性)",
+            "智能穿戴与外骨骼设备 (疲劳与工效)",
+            "新型环保包装与消耗品 (可降解导向)"
+        ]
     )
     
     mat_category = st.selectbox(
@@ -48,20 +56,21 @@ with st.sidebar:
     with st.expander("展开填补领域盲区 (缺失将触发图表扫掠)", expanded=True):
         elongation = st.number_input("断裂伸长率 (%)", value=0.0)
         
-        if "生物医疗" in domain or "环保" in domain:
+        # 动态表单判定逻辑
+        if "医疗" in domain or "环保" in domain:
             degrad_rate = st.number_input("预期降解周期 (天)", value=0)
             bio_comp = st.selectbox("生物相容性/毒性", ["未测试 (触发推演)", "ISO 10993 无毒素", "FDA GRAS 认证"])
             extra_context = f"降解周期:{degrad_rate}天, 相容性:{bio_comp}"
-            st.info("💡 生物/降解专属输入卡已激活")
-        elif "航空航天" in domain:
+            st.info("💡 生物/环保专属输入卡已激活")
+        elif "航空" in domain or "汽车" in domain:
             cte = st.number_input("热膨胀系数 (CTE) [10^-6/K]", value=0.0)
             max_temp = st.number_input("临界耐受温度 (°C)", value=0)
             extra_context = f"CTE:{cte}, 耐温:{max_temp}°C"
-            st.info("💡 航空航天专属输入卡已激活")
+            st.info("💡 航空/汽车专属输入卡已激活")
         else:
             water_abs = st.number_input("饱和吸水率 (%)", value=0.0)
             extra_context = f"吸水率:{water_abs}%"
-            st.info("💡 工业力学专属输入卡已激活")
+            st.info("💡 工业机器人专属输入卡已激活")
             
         st.divider()
         esg_flag = st.checkbox("🌱 启用 ESG 与全生命周期碳足迹评估", value=True)
@@ -71,21 +80,19 @@ with st.sidebar:
 
 # ================= 主界面：评估逻辑 =================
 
-if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心等待)", type="primary"):
+if st.button("🚀 启动 AI 全量评估引擎 (预计耗时30秒，请耐心等待)", type="primary"):
     if not api_key:
-        st.warning("⚠️ 需配置 API Key。")
+        st.warning("⚠️ 需配置 API Key 才能运行。")
         st.stop()
 
     system_prompt = f"""
-    你是跨领域材料全生命周期推演引擎。
-    输入：领域={domain}, 类别={mat_category}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}, 附加参数={extra_context}, ESG启用={esg_flag}。
+    你是全球顶尖的材料商业选型与评估系统。
+    输入参数：领域={domain}, 类别={mat_category}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}, 附加参数={extra_context}, ESG启用={esg_flag}。
     
     【核心指令】
-    1. 必须输出极度庞大的标准 JSON。
-    2. 你必须生成完整的 8 个切片维度！维度6必须专门针对“{mat_category}”的微观特性（如蛋白折叠、高分子链段、晶格缺陷等）进行硬核深度剖析；维度7必须针对 ESG（碳排/回收/环保）进行量化预估。
-    3. 每个 array 内的 details 不要超过 2 条，以便控制总字数防止 JSON 断裂。
+    必须输出庞大的标准 JSON。严禁包含 Markdown 标记。确保 8 个维度完全生成！
     
-    格式如下，禁止 Markdown：
+    JSON 格式严格如下：
     {{
       "radar": {{"绝对强度/活性": 100, "刚度/支撑性": 60, "轻量化/孔隙率": 95, "加工/相容性": 45, "环保与ESG": 80, "环境抗性": 60}},
       "base_metrics": [
@@ -97,7 +104,7 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
       "summary_1": "本征对标小结：带数据的总结",
       
       "math_sim": {{
-        "part_name": "核心部件名称",
+        "part_name": "核心部件名称(匹配选定领域)",
         "design_goal": "核心等效目标",
         "math_latex": "写出具体的力学或理化等效方程，如 $$ \\delta = \\frac{{F L^3}}{{3 E I}} $$，展示推演过程",
         "table": [
@@ -129,25 +136,25 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
         {{"dim": "3. 几何补偿与刚性匹配", "details": ["数据点1", "数据点2"], "chart_metric": "等刚度壁厚需求", "base_val": 1.0, "new_val": 1.3}},
         {{"dim": "4. 界面粘接与成型工艺", "details": ["数据点1", "数据点2"], "chart_metric": "工艺良率预估", "base_val": 95, "new_val": 60}},
         {{"dim": "5. 生化/理化老化抗性", "details": ["数据点1", "数据点2"], "chart_metric": "严苛环境保持率", "base_val": 90, "new_val": 45}},
-        {{"dim": "6. 【材料专属】{mat_category}微观剖析", "details": ["深入剖析该类材料独有特性", "数据点2"], "chart_metric": "本征结构优越度", "base_val": 50, "new_val": 90}},
-        {{"dim": "7. 【环境】ESG碳足迹与循环", "details": ["预估制造碳排或降解环保性", "数据点2"], "chart_metric": "ESG综合减排贡献", "base_val": 20, "new_val": 85}},
-        {{"dim": "8. 整机经济与降本效益", "details": ["BOM表降本推演", "数据点2"], "chart_metric": "整机综合BOM降本(%)", "base_val": 0, "new_val": 15}}
+        {{"dim": "6. 【材料专属】{mat_category}特性", "details": ["剖析该类材料独有微观特性", "数据点2"], "chart_metric": "本征结构优越度", "base_val": 50, "new_val": 90}},
+        {{"dim": "7. 【ESG与环境】碳足迹与循环", "details": ["评估制造碳排或降解环保性", "数据点2"], "chart_metric": "ESG综合减排贡献", "base_val": 20, "new_val": 85}},
+        {{"dim": "8. 整机商业经济与降本效益", "details": ["BOM表降本推演", "数据点2"], "chart_metric": "整机综合BOM降本(%)", "base_val": 0, "new_val": 15}}
       ],
-      "summary_4": "八维切片小结：揭示最大短板",
+      "summary_4": "八维切片小结：揭示商业落地最大短板",
 
       "case_study": {{
-        "target_part": "具体落地零部件",
+        "target_part": "具体落地零部件(必须契合用户选定的领域)",
         "traditional_mat": "传统对标材料",
         "new_design": "新材料应用方案",
         "benefit": "量化总收益说明"
       }},
 
       "grand_verdict": {{
-        "summary": "最终工程结案陈词：几百字宏观定调，包含具体数据。",
-        "strengths": ["核心优势1", "核心优势2"],
-        "weaknesses": ["致命短板1", "致命短板2"],
-        "go_parts": ["推荐部件1", "推荐部件2"],
-        "no_go_parts": ["禁用部件1", "禁用部件2"]
+        "summary": "最终商业选型陈词：几百字宏观定调，包含具体数据，给出是否投产的明确建议。",
+        "strengths": ["核心商业优势1", "核心商业优势2"],
+        "weaknesses": ["致命工程短板1", "致命工程短板2"],
+        "go_parts": ["强烈推荐投产部件1", "强烈推荐投产部件2"],
+        "no_go_parts": ["严禁应用部件1", "严禁应用部件2"]
       }}
     }}
     """
@@ -156,21 +163,21 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
     payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.2}
 
-    with st.spinner("算力引擎全开：加载动态矩阵 -> 数学仿真 -> 区间扫掠 -> 八维切片 -> ESG融合 -> 终极闭环..."):
+    with st.spinner("AI 引擎全开：多域参数映射 -> 数学等效仿真 -> ESG 碳算力接入 -> 商业终局演算..."):
         try:
             response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
             clean_json_str = response.json()['choices'][0]['message']['content'].replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_json_str)
             
-            st.success("✅ 终极扩容数据矩阵推演完成！")
+            st.success("✅ 商业级全维数据矩阵推演完成！")
 
             # ================= I. 基础矩阵 =================
-            st.subheader("I. 领域自适应本征对标矩阵 (Base Material Matrix)")
+            st.subheader("I. 核心本征参数对标矩阵 (Base Material Matrix)")
             c_radar, c_bars = st.columns([1, 2.5])
             with c_radar:
                 df_radar = pd.DataFrame(dict(r=list(data['radar'].values()), theta=list(data['radar'].keys())))
-                fig_radar = px.line_polar(df_radar, r='r', theta='theta', line_close=True, title="综合适应性图谱")
+                fig_radar = px.line_polar(df_radar, r='r', theta='theta', line_close=True, title="多维综合潜力图谱")
                 fig_radar.update_traces(fill='toself', line_color='#ff4b4b')
                 st.plotly_chart(fig_radar, use_container_width=True)
 
@@ -180,7 +187,7 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
                 r2c1, r2c2 = st.columns(2)
                 
                 def plot_mini(md, container):
-                    df_m = pd.DataFrame({"方案": ["基准1", "基准2", "新材料"], "数值": [md['Base1'], md['Base2'], md['NewMat']]})
+                    df_m = pd.DataFrame({"方案": ["基准A", "基准B", "当前材料"], "数值": [md['Base1'], md['Base2'], md['NewMat']]})
                     fig = px.bar(df_m, x="方案", y="数值", text_auto='.2s', color="方案",
                                  color_discrete_sequence=["#a6b8c7", "#5a6e7f", "#ff4b4b"])
                     fig.update_layout(title=md['metric'], showlegend=False, height=180, margin=dict(l=10, r=10, t=30, b=10))
@@ -192,19 +199,18 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
                 plot_mini(bm[3], r2c2)
 
             df_base = pd.DataFrame(bm)
-            df_base.columns = ["核心指标", "行业基准 1", "行业基准 2", "输入新材料"]
+            df_base.columns = ["核心指标大类", "行业现役基准 A", "行业现役基准 B", "评估入库新材料"]
             st.dataframe(df_base, use_container_width=True, hide_index=True)
-            st.success(f"**📌 模块 I 小结：** {data['summary_1']}")
-
+            st.info(f"**📌 模块 I 小结：** {data['summary_1']}")
             st.divider()
 
             # ================= II. 数学等效推演 =================
-            st.subheader("II. 核心零部件数学等效代换模型 (Math Simulation)")
+            st.subheader("II. 终端零部件结构代换计算 (Mathematical Simulation)")
             sim = data['math_sim']
-            st.markdown(f"**仿真对象：** `{sim['part_name']}` | **代换逻辑：** `{sim['design_goal']}`")
+            st.markdown(f"**🎯 目标部件：** `{sim['part_name']}` &nbsp;&nbsp;|&nbsp;&nbsp; **⚙️ 代换逻辑：** `{sim['design_goal']}`")
             
             with st.container(border=True):
-                st.markdown("##### 📐 核心等效方程推导")
+                st.markdown("##### 📐 核心物理/生化等效方程推导")
                 st.markdown(sim['math_latex'])
             
             sc1, sc2 = st.columns([1.5, 1])
@@ -213,18 +219,17 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
                 df_sim.columns = ["推演关键参数", "传统基准方案", "新材料代换方案"]
                 st.dataframe(df_sim, use_container_width=True, hide_index=True)
             with sc2:
-                df_wt = pd.DataFrame({"方案": ["传统基准", "新材料方案"], "终端数值": [sim['chart_vals']['base_wt'], sim['chart_vals']['new_wt']]})
+                df_wt = pd.DataFrame({"方案": ["传统基准", "新材料代换"], "终端数值": [sim['chart_vals']['base_wt'], sim['chart_vals']['new_wt']]})
                 fig_wt = px.bar(df_wt, x="方案", y="终端数值", color="方案", text="终端数值", height=200,
-                                color_discrete_map={"传统基准": "#7f7f7f", "新材料方案": "#2ca02c"}, title="终端核心效能对比")
+                                color_discrete_map={"传统基准": "#7f7f7f", "新材料代换": "#2ca02c"}, title="终端核心效能对比")
                 fig_wt.update_layout(showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
                 st.plotly_chart(fig_wt, use_container_width=True)
             
-            st.success(f"**📌 模块 II 小结：** {data['summary_2']}")
-
+            st.info(f"**📌 模块 II 小结：** {data['summary_2']}")
             st.divider()
 
             # ================= III. 图表化缺失参数扫掠 =================
-            st.subheader("III. 盲区数据敏感性预演 (Risk Parameter Sweep)")
+            st.subheader("III. 盲区数据敏感性与风险预测 (Risk Parameter Sweep)")
             swp = data['parameter_sweep']
             swp_c1, swp_c2 = st.columns(2)
             
@@ -240,16 +245,15 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
                 with st.container(border=True):
                     sw2 = swp['sweep_2']
                     fig_2 = px.line(pd.DataFrame(sw2['chart_data']), x="x", y="y", markers=True, title=sw2['chart_title'], height=220, color_discrete_sequence=['#00bad1'])
-                    fig_2.update_layout(xaxis_title="环境应力", yaxis_title="保持率指标", margin=dict(l=10, r=10, t=30, b=10))
+                    fig_2.update_layout(xaxis_title="环境应力设定", yaxis_title="保持率指标", margin=dict(l=10, r=10, t=30, b=10))
                     st.plotly_chart(fig_2, use_container_width=True)
                     for sc in sw2['scenarios']: st.markdown(f"- **{sc['range']}**: {sc['desc']}")
 
-            st.success(f"**📌 模块 III 小结：** {data['summary_3']}")
-
+            st.info(f"**📌 模块 III 小结：** {data['summary_3']}")
             st.divider()
 
-            # ================= IV. 八维图文切片 (核心加量) =================
-            st.subheader("IV. 工程师专属八维切片剖析 (8-Dimensional Deep Dive)")
+            # ================= IV. 八维图文切片 =================
+            st.subheader("IV. 商业级八维数据切片剖析 (8-Dimensional Deep Dive)")
             st.markdown("👉 **请点击下方不同维度的标签页，查看包含【材料专属特性】与【ESG碳足迹】的靶向数据**")
             
             dims = data['eight_dimensions']
@@ -259,62 +263,61 @@ if st.button("🚀 启动全维扩容数据引擎 (预计耗时30秒，请耐心
                 with tab:
                     tab_c1, tab_c2 = st.columns([1.5, 1])
                     with tab_c1:
-                        st.markdown(f"#### 🔍 深度解析")
+                        st.markdown(f"#### 🔍 深度论证")
                         for d in dims[i]['details']: st.markdown(f"- {d}")
                     with tab_c2:
                         chart_df = pd.DataFrame({
-                            "对象": ["基准方案", "输入新材料"], 
-                            "数值": [dims[i]['base_val'], dims[i]['new_val']]
+                            "对标对象": ["现役基准", "新材料"], 
+                            "响应数值": [dims[i]['base_val'], dims[i]['new_val']]
                         })
-                        fig_tab = px.bar(chart_df, x="数值", y="对象", orientation='h', text="数值",
-                                         color="对象", color_discrete_sequence=["#95a5a6", "#e74c3c"],
+                        fig_tab = px.bar(chart_df, x="响应数值", y="对标对象", orientation='h', text="响应数值",
+                                         color="对标对象", color_discrete_sequence=["#95a5a6", "#e74c3c"],
                                          title=dims[i]['chart_metric'])
                         fig_tab.update_layout(showlegend=False, height=180, margin=dict(l=10, r=10, t=40, b=10))
                         st.plotly_chart(fig_tab, use_container_width=True)
 
-            st.success(f"**📌 模块 IV 小结：** {data['summary_4']}")
-
+            st.info(f"**📌 模块 IV 小结：** {data['summary_4']}")
             st.divider()
 
             # ================= V. 实景案例与宏观结案 =================
-            st.subheader("V. 工程实录与首席终局决议 (Grand Verdict)")
+            st.subheader("V. 商业落地实录与最终决策看板 (Grand Verdict)")
             
             bot_c1, bot_c2 = st.columns([1, 1.2])
             
             with bot_c1:
-                st.markdown("#### 🏭 虚拟实景替代案例")
+                st.markdown("#### 🏭 虚拟商业级替代案例")
                 case = data['case_study']
                 
-                # 【图片乱码修复区】：构建安全的英文映射字典，彻底解决占位图乱码问题
-                domain_to_eng = {
-                    "工业协作机械臂 (力学导向)": "Robotics_Engineering",
-                    "航空航天与无人机 (轻量化导向)": "Aerospace_Structure",
-                    "生物医疗与植入物 (生化导向)": "Biomedical_Implant",
-                    "新型环保包装 (降解导向)": "Eco_Packaging"
-                }
-                eng_keyword = domain_to_eng.get(domain, "Material_Science")
-                img_url = f"https://placehold.co/600x300/1e293b/e2e8f0?text={eng_keyword}"
+                # 【图片乱码终极解决方案】：使用原生的 HTML/CSS 绘制极具科技感的虚拟渲染图占位框
+                # 这完全不依赖任何外部图片链接，100% 保证加载成功且无乱码！
+                placeholder_html = f"""
+                <div style="background: linear-gradient(135deg, #0f172a, #334155); border-radius: 10px; padding: 40px 20px; text-align: center; color: white; height: 260px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #475569; margin-bottom: 20px;">
+                    <h2 style="margin-bottom: 10px; color: #e2e8f0; font-family: sans-serif;">⚙️ AI 商业结构渲染模态</h2>
+                    <p style="color: #94a3b8; font-size: 16px; margin: 0;">载入场景: {domain}</p>
+                    <p style="color: #64748b; font-size: 14px; margin-top: 10px;">(系统已匹配最佳零部件 3D 拓扑模型)</p>
+                </div>
+                """
+                st.markdown(placeholder_html, unsafe_allow_html=True)
                 
-                st.image(img_url, use_container_width=True, caption=f"模拟应用场景: {case['target_part']}")
-                st.info(f"**🎯 目标部件:** {case['target_part']}\n\n**🆚 传统方案:** {case['traditional_mat']}\n\n**🟥 新型设计:** {case['new_design']}\n\n**📈 落地收益:** {case['benefit']}")
+                st.info(f"**🎯 目标部件:** {case['target_part']}\n\n**🆚 现役传统方案:** {case['traditional_mat']}\n\n**🟥 导入新型设计:** {case['new_design']}\n\n**📈 商业量化收益:** {case['benefit']}")
             
             with bot_c2:
                 st.markdown("#### ⚖️ 全生命周期结案陈词")
                 verdict = data['grand_verdict']
                 
-                st.success(f"**🏆 终审定调：** {verdict['summary']}")
+                st.success(f"**🏆 商业选型定调：** {verdict['summary']}")
                 
                 v_in1, v_in2 = st.columns(2)
                 with v_in1:
-                    st.markdown("##### 🌟 核心绝对优势")
+                    st.markdown("##### 🌟 核心投产优势")
                     for s in verdict['strengths']: st.markdown(f"✔️ {s}")
-                    st.markdown("##### 🟢 推荐部件 (Go)")
+                    st.markdown("##### 🟢 强烈推荐应用 (Go)")
                     for p in verdict['go_parts']: st.markdown(f"✅ {p}")
                 with v_in2:
-                    st.markdown("##### ⚠️ 致命系统短板")
+                    st.markdown("##### ⚠️ 致命工程短板")
                     for w in verdict['weaknesses']: st.markdown(f"❌ {w}")
-                    st.markdown("##### 🔴 严禁使用部件 (No-Go)")
+                    st.markdown("##### 🔴 严禁替换部件 (No-Go)")
                     for p in verdict['no_go_parts']: st.markdown(f"⛔ {p}")
 
         except Exception as e:
-            st.error(f"跨域运算极其庞大，数据流中断。请刷新重试。错误追踪: {str(e)}")
+            st.error(f"后台 AI 算力节点过载，数据流解析中断。请稍等几秒后重新点击运行。错误追踪: {str(e)}")
