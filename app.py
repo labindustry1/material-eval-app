@@ -8,7 +8,6 @@ import plotly.express as px
 st.set_page_config(page_title="AI 商业选型系统", layout="wide", initial_sidebar_state="expanded")
 
 # ================= 🔐 第一关：商业邀请码验证系统 =================
-# 这样别人就算拿到你的网址，没有密码也进不来
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
@@ -19,12 +18,12 @@ if not st.session_state["authenticated"]:
         st.info("🛡️ 该商业评估系统已加密，仅限受邀用户访问。")
         pwd = st.text_input("请输入专属邀请码：", type="password")
         if st.button("解锁系统", type="primary", use_container_width=True):
-            if pwd == "VIP2026":  # 你可以随时在这里修改你的密码
+            if pwd == "VIP2026":  # 邀请码
                 st.session_state["authenticated"] = True
                 st.rerun()
             else:
                 st.error("邀请码错误或已过期！")
-    st.stop() # 停止运行后面的所有代码，直到密码正确
+    st.stop()
 # ===================================================================
 
 # ================= 导入本地挂载引擎 (智能容错) =================
@@ -58,7 +57,7 @@ DOMAIN_CONFIG = {
             {"label": "吸水溶胀率 (%)", "type": "number", "default": 2.0, "key": "swelling_rate"}
         ],
         "search_suffix": "biocompatibility ISO 10993 in vivo degradation rate medical implants scholarly research",
-        "strict_constraint": "【绝对禁令】：严禁在报告中提及军工、航空、装甲、防弹等无关工业词汇！必须严格聚焦于组织工程、骨传导、降解代谢产物毒性、FDA/CE准入标准。对标材料必须是天然骨骼、PEEK或医用钛合金。"
+        "strict_constraint": "【绝对禁令】：严禁在报告中提及军工、航空、装甲、防弹等无关工业词汇！必须严格聚焦于组织工程、骨传导、降解代谢产物毒性、FDA准入标准。对标材料必须是天然骨骼、PEEK或医用钛合金。"
     },
     "人形机器人核心骨架 (高动载/刚度)": {
         "ui_inputs": [
@@ -84,10 +83,43 @@ DOMAIN_CONFIG = {
         ],
         "search_suffix": "aerospace structural materials thermal stability FAA regulations scholarly research",
         "strict_constraint": "【绝对禁令】：严禁提及医疗或普通民用标准！重点分析高低温循环交变应力、抗微陨石冲击及适航认证(FAA/EASA)。"
+    },
+    "新能源汽车与动力电池包 (吸能/阻燃)": {
+        "ui_inputs": [
+            {"label": "阻燃与热失控防护", "type": "selectbox", "options": ["UL94-V0 (电池包级)", "内饰级阻燃", "无要求"], "key": "ev_flame"},
+            {"label": "碰撞吸能比 (%)", "type": "slider", "min": 10, "max": 100, "default": 60, "key": "crash_absorption"}
+        ],
+        "search_suffix": "EV battery enclosure crashworthiness flame retardant lightweight vehicle structure scholarly research",
+        "strict_constraint": "【绝对禁令】：严禁提及医疗或航天！必须聚焦汽车轻量化、电池包防刺穿、热失控隔热阻燃以及 NCAP 碰撞标准。对标高强钢或铝合金压铸件。"
+    },
+    "工业协作机械臂 (精度与疲劳导向)": {
+        "ui_inputs": [
+            {"label": "设计疲劳寿命 (10^7次)", "type": "number", "default": 100, "key": "fatigue_cycles"},
+            {"label": "刚度形变容忍度 (mm)", "type": "slider", "min": 0.01, "max": 2.00, "default": 0.10, "key": "deformation_tolerance"}
+        ],
+        "search_suffix": "industrial collaborative robot arm lightweight stiffness fatigue resistance scholarly research",
+        "strict_constraint": "【绝对禁令】：严禁偏向防弹或医疗！重点在于绝对的高刚度（防止机械臂末端下垂误差）和24小时连续运作的高周疲劳极限。对标铸铁或挤压铝材。"
+    },
+    "智能穿戴与柔性外骨骼 (工效与贴合)": {
+        "ui_inputs": [
+            {"label": "柔性弯曲疲劳 (万次)", "type": "number", "default": 50, "key": "flex_fatigue"},
+            {"label": "表面亲肤透气性", "type": "selectbox", "options": ["高透气排汗", "防风防水", "致密不透气"], "key": "breathability"}
+        ],
+        "search_suffix": "wearable flexible exoskeleton ergonomic material durability scholarly research",
+        "strict_constraint": "【绝对禁令】：不能用刚性骨架的思维评估！必须聚焦于人机交互的舒适度、柔性储能、耐磨性和生理工效学。评估舒适性和长期服役形变。"
+    },
+    "高性能纺织与极限户外装备 (耐候/舒适)": {
+        "ui_inputs": [
+            {"label": "公定回潮率 (%)", "type": "number", "default": 4.5, "key": "moisture_regain"},
+            {"label": "抗紫外线衰减等级", "type": "selectbox", "options": ["极高 (高海拔户外)", "中等", "无需防护"], "key": "uv_resistance"},
+            {"label": "耐水洗与磨损次数", "type": "number", "default": 200, "key": "wash_cycles"}
+        ],
+        "search_suffix": "high performance textile fiber moisture wicking abrasion resistance outdoor gear scholarly research",
+        "strict_constraint": "【绝对禁令】：不要用硬质工业材料的思维！必须围绕服装纺织标准（如AATCC），分析其在户外日晒、雨淋、拉扯下的性能表现。对标锦纶或超高分子量聚乙烯纤维。"
     }
 }
 
-st.title("🚀 AI 材料商业评估与选型系统 (v19.0 企业专属版)")
+st.title("🚀 AI 材料商业评估与选型系统 (v19.5 全域旗舰版)")
 st.markdown("""
 <style>
     .stTabs [data-baseweb="tab-list"] {gap: 6px; flex-wrap: wrap;}
@@ -107,7 +139,7 @@ with st.sidebar:
     density = st.number_input("密度 (g/cm³)", value=1.30)
     strength = st.number_input("极限抗拉强度 (MPa)", value=9600)
     modulus = st.number_input("弹性模量 (GPa)", value=100)
-    material_form = st.selectbox("形态", ["连续长丝/纤维", "体块/水凝胶"])
+    material_form = st.selectbox("加工形态", ["连续长丝/纤维", "体块/水凝胶", "薄膜/涂层"])
 
     st.header("3. 领域专属关键参数")
     domain_specific_data = {}
@@ -119,6 +151,7 @@ with st.sidebar:
         elif item["type"] == "selectbox":
             domain_specific_data[item["key"]] = st.selectbox(item["label"], item["options"])
             
+    st.divider()
     if st.button("退出登录", type="secondary"):
         st.session_state["authenticated"] = False
         st.rerun()
@@ -150,7 +183,7 @@ if st.button("🚀 启动专属领域全量评估", type="primary"):
     
     💥【领域安全隔离防线 (CRITICAL)】💥
     {current_config['strict_constraint']}
-    若违反禁令跨界分析，视为严重错误！
+    若违反禁令跨界分析，视为严重错误！必须深度结合“领域专属参数”进行推演。
     
     【全网实时对标情报】: {web_context}
     【本地私有工艺经验】: {rag_context}
@@ -360,7 +393,6 @@ if st.button("🚀 启动专属领域全量评估", type="primary"):
                     
             st.divider()
             st.subheader("📚 数据溯源 (Data Origins)")
-            # 这里的输出就会非常专业了，全是“独家内部数据库”和“学术文献”
             for ref in data.get('reference_sources', []): st.markdown(f"- 🔗 **{ref}**")
 
         except Exception as e:
