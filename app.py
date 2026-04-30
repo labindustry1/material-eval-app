@@ -88,13 +88,19 @@ with st.sidebar:
     modulus = st.number_input("弹性模量 (GPa)", value=100)
     material_form = st.selectbox("材料加工形态", ["连续长丝/纤维 (单向受力)", "各向同性体块/水凝胶"])
 
-    st.header("3. 算力与网络引擎")
-    api_key = st.text_input("DeepSeek API Key (AI 大脑)", type="password", value=st.secrets.get("DEEPSEEK_API_KEY", ""))
     
     # 将你刚刚提供的 Tavily Key 设为默认值
     tavily_key = st.text_input("Tavily API Key (全网嗅探)", type="password", value="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")
 
 # ================= 主界面：评估逻辑 =================
+# ================= 后台静默读取 API Keys =================
+# 直接从云端保险箱读取，界面上不再显示
+api_key = st.secrets.get("DEEPSEEK_API_KEY", "") 
+tavily_key = st.secrets.get("TAVILY_API_KEY", "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") # 没配置的话默认用你给的这个
+# =======================================================
+
+if st.button("🚀 启动混合全量评估引擎 (预计耗时40秒)", type="primary"):
+    # 剩下的代码保持不变...
 if st.button("🚀 启动混合全量评估引擎 (预计耗时40秒)", type="primary"):
     if not api_key:
         st.warning("⚠️ 需配置 DeepSeek API Key 才能运行。")
