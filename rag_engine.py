@@ -56,6 +56,6 @@ def retrieve_knowledge(query, k=4):
     for doc in docs:
         source_path = doc.metadata.get('source', '未知文献')
         file_name = os.path.basename(source_path) # 只保留 "xxx.pdf"
-        context_list.append(f"[来源文献: {file_name}]\n{doc.page_content}")
+        context_list.append(f"【来自独家数据库资料】\n{doc.page_content}")
         
     return "\n\n---\n\n".join(context_list)
