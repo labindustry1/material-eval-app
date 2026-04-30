@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 
 # ================= UI 页面基础配置 =================
-st.set_page_config(page_title="AI 商业选型系统", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="材料可行性评估系统", layout="wide", initial_sidebar_state="expanded")
 
 # ================= 🔐 第一关：商业邀请码验证系统 =================
 if "authenticated" not in st.session_state:
@@ -15,7 +15,7 @@ if not st.session_state["authenticated"]:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
-        st.info("🛡️ 该商业评估系统已加密，仅限受邀用户访问。")
+        st.info("🛡️ 该评估系统已加密，仅限受邀用户访问。")
         pwd = st.text_input("请输入专属邀请码：", type="password")
         if st.button("解锁系统", type="primary", use_container_width=True):
             if pwd == "VIP2026":  # 邀请码
@@ -119,7 +119,7 @@ DOMAIN_CONFIG = {
     }
 }
 
-st.title("🚀 AI 材料商业评估与选型系统 (v19.5 全域旗舰版)")
+st.title("🚀 材料特性在具体应用领域中的使用可行性评估系统")
 st.markdown("""
 <style>
     .stTabs [data-baseweb="tab-list"] {gap: 6px; flex-wrap: wrap;}
@@ -176,7 +176,7 @@ if st.button("🚀 启动专属领域全量评估", type="primary"):
 
     # ---------------- 严谨的大模型指令 ----------------
     system_prompt = f"""
-    你是全球顶尖的材料商业评估系统。当前评估语境：【{domain}】。
+    你是全球顶尖的材料评估系统。当前评估语境：【{domain}】。
     
     【基础参数】: 密度={density}, 强度={strength}, 模量={modulus}。
     【领域专属参数】: {json.dumps(domain_specific_data, ensure_ascii=False)}。
@@ -271,7 +271,7 @@ if st.button("🚀 启动专属领域全量评估", type="primary"):
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
     payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.15}
 
-    with st.spinner("架构隔离防线已启动，正在生成专家级商业评测报告..."):
+    with st.spinner("架构隔离防线已启动，正在生成专家级评测报告..."):
         try:
             response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
