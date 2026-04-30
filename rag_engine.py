@@ -1,58 +1,61 @@
-# rag_engine.py
 import os
+# 如果没有这些库，记得在 requirements.txt 里加上 pdfplumber
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
-# 设定本地知识库文件夹
 KNOWLEDGE_DIR = "knowledge_base/"
+INDEX_PATH = "faiss_index"
 
 def build_vector_store():
-    """读取文件并构建向量数据库 (首次运行或更新数据时调用)"""
+    """读取文件夹下所有海量文献，并建立向量索引"""
     if not os.path.exists(KNOWLEDGE_DIR):
         os.makedirs(KNOWLEDGE_DIR)
-        print("请将 PDF 或 TXT 放入 knowledge_base 文件夹")
         return
 
     documents = []
-    # 遍历加载文件夹内所有文档
     for file in os.listdir(KNOWLEDGE_DIR):
         file_path = os.path.join(KNOWLEDGE_DIR, file)
-        if file.endswith(".pdf"):
-            documents.extend(PyPDFLoader(file_path).load())
-        elif file.endswith(".txt"):
-            documents.extend(TextLoader(file_path, encoding='utf-8').load())
+        try:
+            if file.endswith(".pdf"):
+                documents.extend(PyPDFLoader(file_path).load())
+            elif file.endswith(".txt"):
+                documents.extend(TextLoader(file_path, encoding='utf-8').load())
+        except Exception as e:
+            print(f"读取 {file} 失败: {e}")
 
     if not documents:
-        print("知识库为空，跳过构建。")
         return
 
-    # 将长文档切分为 500 字的语义块
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    # 切割长篇文献，保留上下文
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100)
     chunks = text_splitter.split_documents(documents)
 
-    # 使用本地免费开源模型进行向量化 (对中文和专业词汇支持好)
+    # 向量化并保存 (这会在本地生成 faiss_index 文件夹)
     embeddings = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese")
-    
-    # 存入 FAISS 并保存到本地
     vectorstore = FAISS.from_documents(chunks, embeddings)
-    vectorstore.save_local("faiss_index")
-    print(f"成功构建向量库，共包含 {len(chunks)} 个知识块！")
+    vectorstore.save_local(INDEX_PATH)
 
-def retrieve_knowledge(query, k=3):
-    """根据用户的输入，精准抽出最相关的 K 段文献"""
-    if not os.path.exists("faiss_index"):
-        return "本地无知识库。"
+def retrieve_knowledge(query, k=4):
+    """根据问题精准检索前4个最相关的文献段落，并附带文件名"""
+    # 如果没有数据库，自动建库！(这解决了云端重启后数据丢失的问题)
+    if not os.path.exists(INDEX_PATH) or not os.listdir(INDEX_PATH):
+        build_vector_store()
+        
+    if not os.path.exists(INDEX_PATH):
+         return "未检索到本地文献库。"
     
     embeddings = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese")
-    vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    vectorstore = FAISS.load_local(INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
     
     docs = vectorstore.similarity_search(query, k=k)
-    # 将检索到的参考资料拼接成字符串
-    context = "\n\n".join([f"[来源: {doc.metadata.get('source', '未知')}] {doc.page_content}" for doc in docs])
-    return context
-
-# 如果直接运行此脚本，则构建知识库
-if __name__ == "__main__":
-    build_vector_store()
+    
+    # 核心：强行把文件名（去掉路径前缀）拼接在段落最前面！
+    context_list = []
+    for doc in docs:
+        source_path = doc.metadata.get('source', '未知文献')
+        file_name = os.path.basename(source_path) # 只保留 "xxx.pdf"
+        context_list.append(f"[来源文献: {file_name}]\n{doc.page_content}")
+        
+    return "\n\n---\n\n".join(context_list)
