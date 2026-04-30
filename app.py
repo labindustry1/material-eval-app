@@ -4,19 +4,20 @@ import json
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import urllib.parse
 
 # ================= UI 页面配置 =================
-st.set_page_config(page_title="工业材料全景数据推演系统", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="工业级材料量化推演系统", layout="wide", initial_sidebar_state="expanded")
 
-st.title("⚙️ 材料本征与零部件代换全景推演系统 (v9.0 终极矩阵版)")
-st.caption("基准对标 | 图表双轨解析 | 等效数学建模 | 虚拟案例库 | 全维结案看板")
+st.title("🧬 材料本征与系统级效应全景推演引擎 (v10.0)")
+st.caption("基准对标 | 缺失参数敏感性扫掠 | 整机效能折算 | 工程实景映射")
 
 # ================= 侧边栏：全参数输入 =================
 with st.sidebar:
-    st.header("1. 目标应用与基准")
+    st.header("1. 目标应用工况")
     domain = st.selectbox(
-        "下游目标工况",
-        ["工业机器人 (关注刚度与挠度)", "航空航天与无人机 (关注极致比强度)", "医疗器械结构件 (关注疲劳与相容性)"]
+        "下游整机系统",
+        ["高负载协作机械臂", "长航时工业无人机", "深海探测器结构件", "可穿戴外骨骼"]
     )
 
     st.header("2. 核心物性参数")
@@ -24,15 +25,15 @@ with st.sidebar:
     strength = st.number_input("极限抗拉强度 (MPa)", value=9600)
     modulus = st.number_input("弹性模量 (GPa)", value=100)
     
-    st.header("3. 物理形态约束")
+    st.header("3. 宏观结构形态")
     material_form = st.selectbox(
-        "成型宏观形态",
-        ["纤维/长丝 (单向受力/复材增强相)", "各向同性体块/树脂/金属替代品 (多向受力)"]
+        "材料加工形态",
+        ["连续长丝/高取向纤维 (单向极限承载)", "多轴向织物预浸料 (平面各向同性)", "浇铸体/3D打印件 (体块受力)"]
     )
 
-    st.header("4. 高阶参数 (Sparse Data)")
-    with st.expander("展开填补高阶盲区"):
-        elongation = st.number_input("断裂伸长率 (%)", value=0.0)
+    st.header("4. 高阶参数 (选填/触发扫掠)")
+    with st.expander("留空将自动触发区间敏感性扫掠"):
+        elongation = st.number_input("断裂伸长率 (%)", value=0.0, help="留空为0时，系统将推演脆性/韧性区间")
         water_abs = st.number_input("饱和吸水率 (%)", value=0.0)
 
     st.header("5. 算力引擎")
@@ -40,194 +41,138 @@ with st.sidebar:
 
 # ================= 主界面：评估逻辑 =================
 
-if st.button("运行全景数据推演与案例生成引擎", type="primary"):
+if st.button("启动系统级数据矩阵与参数扫掠", type="primary"):
     if not api_key:
-        st.warning("⚠️ 需配置 API Key 方可运行。")
+        st.warning("⚠️ 需配置 API Key。")
         st.stop()
 
-    # 压榨大模型输出极限的超长 JSON 结构指令
     system_prompt = f"""
-    你是一个全景材料数据推演引擎。
-    参数：领域={domain}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}, 伸长率={elongation}%, 吸水率={water_abs}%。
+    你是一个终极工业材料数据演算引擎。
+    输入：系统={domain}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}, 伸长率={elongation}%, 吸水率={water_abs}%。
     
-    【强制要求】
-    1. 客观冷峻，纯数据支撑。
-    2. 严格按以下 JSON 结构输出，不可省略任何字段，绝不包含 Markdown。
+    【核心演算要求】
+    1. 必须输出极度硬核的数据，禁止废话。
+    2. 【缺失扫掠】若伸长率或吸水率趋近于0，必须预设2个关键的缺失参数（如高分子纤维的吸湿膨胀系数、非晶区玻璃化温度、或韧性断裂能），并给出不同数值区间的工程后果。
+    3. 【整机效应】必须把材料在局部零部件上的减重/增强，折算成对最终整机系统（如无人机、机械臂）的宏观提升（包含估算百分比）。
     
+    严格输出以下 JSON，不可改变结构，不含 Markdown：
     {{
-      "radar_score": {{"比强度": 100, "比刚度": 60, "轻量化效能": 95, "加工成型率": 45, "疲劳极限": 50}},
-      "base_metrics": [
-        {{"metric": "绝对强度 (MPa)", "Al7075": 570, "T1000": 3000, "NewMat": {strength}}},
-        {{"metric": "绝对模量 (GPa)", "Al7075": 71, "T1000": 160, "NewMat": {modulus}}},
-        {{"metric": "比强度 (kN·m/kg)", "Al7075": 203, "T1000": 1875, "NewMat": {strength/density}}},
-        {{"metric": "比模量 (GPa·cm³/g)", "Al7075": 25.3, "T1000": 100, "NewMat": {modulus/density}}}
+      "radar_score": {{"比强度极限": 100, "系统级刚度": 60, "整机轻量化": 95, "环境容忍度": 45, "加工成型率": 50, "能量吸收/韧性": 70}},
+      "multi_dimensional_data": [
+        {{"metric": "拉伸比强度 (kN·m/kg)", "baseline_name": "T1000碳纤", "baseline_val": 1875, "new_val": {strength/density}}},
+        {{"metric": "弯曲比刚度 (GPa·cm³/g)", "baseline_name": "铝合金7075", "baseline_val": 25.3, "new_val": {modulus/density}}}
       ],
-      "component_simulation": {{
-        "part_name": "典型主承力部件 (悬臂梁/机臂)",
-        "design_goal": "等刚度代换 (控制末端挠度不变)",
-        "math_process": "根据公式 $$ \\delta = \\frac{{F L^3}}{{3 E I}} $$，令新旧挠度相等，则 $E_1 I_1 = E_2 I_2$。因新模量 $E_2={modulus}$GPa，铝 $E_1=71$GPa，则截面惯性矩需求 $I_2 = 0.71 I_1$。代入管材质量公式推导最终减重。",
-        "table_data": [
-          {{"param": "模量 E (GPa)", "base": 71, "new": {modulus}}},
-          {{"param": "等效截面惯性矩 I", "base": 1.0, "new": 0.71}},
-          {{"param": "预估总重 (kg)", "base": 4.25, "new": 1.35}}
-        ],
-        "chart_title": "等刚度代换下零部件重量对比 (kg)",
-        "chart_base_val": 4.25,
-        "chart_new_val": 1.35
-      }},
-      "five_dimensions_analysis": [
-        {{"dim": "静态拉压极限", "details": ["数据点1", "数据点2"]}},
-        {{"dim": "动态疲劳与形变", "details": ["基于伸长率和模量的疲劳推演", "数据点2"]}},
-        {{"dim": "界面与加工约束", "details": ["形态导致的工艺难点", "数据点2"]}},
-        {{"dim": "环境与理化耐受", "details": ["基于吸水率或常规预估的耐受分析", "数据点2"]}},
-        {{"dim": "综合轻量化收益", "details": ["减重百分比在系统层面的二次收益", "数据点2"]}}
-      ],
-      "case_studies": [
+      "missing_data_sweep": [
         {{
-          "target_part": "轻载高速连杆",
-          "traditional_mat": "碳纤维T300管",
-          "new_mat_design": "新材料单向拉挤管",
-          "quantified_benefit": "因绝对强度极高，壁厚可削减50%，整件减重30%，惯量大幅降低提升电机响应。"
+          "parameter": "断裂伸长率预设区间",
+          "scenarios": [
+            {{"range": "< 2%", "consequence": "呈现极度脆性，对冲击载荷极度敏感。仅能用于纯静态拉伸件，需在表面包覆芳纶吸能层。"}},
+            {{"range": "5% - 8%", "consequence": "结合9600MPa的强度，断裂功（韧性）将超越所有已知纤维，可直接作为防爆装甲或跌落吸能骨架。"}},
+            {{"range": "> 15%", "consequence": "可能引发严重的模量衰减，在受力后产生不可逆塑性变形，精密机器人领域严禁使用。"}}
+          ]
         }},
         {{
-          "target_part": "重载高精法兰",
-          "traditional_mat": "7075铝合金",
-          "new_mat_design": "新材料复合铺层",
-          "quantified_benefit": "因模量不足(100 vs 71优势不大)，为达到极小公差，需增加截面积，减重收益收窄至15%，性价比低。"
+          "parameter": "吸湿/热变性预设区间 (特种大分子常见盲区)",
+          "scenarios": [
+            {{"range": "强极性溶剂中超收缩", "consequence": "若遇水/湿气发生超过5%的结构收缩，必须采用全封闭树脂基体包裹，禁止裸露使用。"}},
+            {{"range": "Tg (非晶区玻璃化温度) < 80°C", "consequence": "电机附近等中温区需做隔热处理，否则模量呈断崖式下跌。"}}]
         }}
       ],
-      "final_verdict": {{
-        "core_strengths": ["列出2条带数据的核心优势"],
-        "hard_limits": ["列出2条带数据的致命缺陷"],
-        "go_parts": ["明确列出3个绝对推荐使用的零部件名称"],
-        "no_go_parts": ["明确列出2个严禁使用的零部件名称(容易失效)"]
-      }}
+      "system_level_impact": {{
+        "component_level": "机械臂大臂管材减重 65% (等刚度前提下)",
+        "macro_effects": [
+          {{"indicator": "末端有效载荷 (Payload)", "improvement": "+ 18%", "justification": "因大臂自重减少，关节电机输出扭矩的无效占用降低18%。"}},
+          {{"indicator": "高速抑震响应 (Settling Time)", "improvement": "- 12%", "justification": "纤维的高阻尼特性结合低惯量，使末端到位后的残余震荡时间缩短。"}},
+          {{"indicator": "综合能耗 (Power Consumption)", "improvement": "- 22%", "justification": "动态加减速过程中的惯性力大幅下降，直接降低峰值电流。"}}]
+      }},
+      "real_world_case": {{
+        "image_keyword": "Robotic Arm Carbon Fiber",
+        "title": "某型 10kg 级协作机械臂底座至大臂段升级方案",
+        "description": "原采用铸铝合金。换用该材料长丝缠绕工艺后，需注意纤维铺层角度需采用 [0/±45/90] 混编以弥补径向刚度不足。最终系统减重带来电机规格可降一档，BOM成本理论上可对冲新材料溢价。"
+      }},
+      "conclusion_data_string": "综合推演：本征比强度超越基准 3.9 倍，但在整机系统中，受制于模量需进行几何补偿，最终系统级轻量化净收益为 40%-55%。需重点防范吸水塑化风险。"
     }}
     """
 
     API_URL = "https://api.deepseek.com/chat/completions"
     API_URL = API_URL.encode('ascii', 'ignore').decode('ascii').strip()
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
-    payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.15}
+    payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.2}
 
-    with st.spinner("算力引擎超频运行：解析海量矩阵与推演案例..."):
+    with st.spinner("算力引擎正在进行缺失参数扫掠与整机效能换算..."):
         try:
             response = requests.post(API_URL, headers=headers, json=payload, timeout=100)
             response.raise_for_status()
             clean_json_str = response.json()['choices'][0]['message']['content'].replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_json_str)
             
-            st.success("✅ 全景数据矩阵生成完毕。")
+            st.success("✅ 全景系统级推演完成。")
             
-            # ================= I. 材料本征参数 (图 + 表) =================
-            st.subheader("I. 材料本征参数对标矩阵 (Base Material Matrix)")
-            
-            # 顶部图表
-            col_radar, col_charts = st.columns([1, 2.5])
-            with col_radar:
+            # ================= I. 基础指标矩阵 =================
+            st.subheader("I. 多维本征指标与系统级映射")
+            c_radar, c_bar = st.columns([1, 2])
+            with c_radar:
                 df_radar = pd.DataFrame(dict(r=list(data['radar_score'].values()), theta=list(data['radar_score'].keys())))
-                fig_radar = px.line_polar(df_radar, r='r', theta='theta', line_close=True, title="多维潜力评估")
-                fig_radar.update_traces(fill='toself', line_color='#1f77b4')
-                fig_radar.update_layout(margin=dict(l=30, r=30, t=40, b=20), height=350)
+                fig_radar = px.line_polar(df_radar, r='r', theta='theta', line_close=True, height=320)
+                fig_radar.update_traces(fill='toself', line_color='#ff4b4b')
                 st.plotly_chart(fig_radar, use_container_width=True)
-
-            with col_charts:
-                base_metrics = data['base_metrics']
-                r1c1, r1c2 = st.columns(2)
-                r2c1, r2c2 = st.columns(2)
-                
-                def plot_mini(md, container):
-                    df_m = pd.DataFrame({"Material": ["Al7075", "T1000", "NewMat"], "Value": [md['Al7075'], md['T1000'], md['NewMat']]})
-                    fig = px.bar(df_m, x="Material", y="Value", text_auto='.2s', color="Material",
-                                 color_discrete_map={"Al7075": "#a6b8c7", "T1000": "#5a6e7f", "NewMat": "#d62728"})
-                    fig.update_layout(title=md['metric'], showlegend=False, height=180, margin=dict(l=10, r=10, t=30, b=10))
-                    container.plotly_chart(fig, use_container_width=True)
-
-                plot_mini(base_metrics[0], r1c1)
-                plot_mini(base_metrics[1], r1c2)
-                plot_mini(base_metrics[2], r2c1)
-                plot_mini(base_metrics[3], r2c2)
-
-            # 底部补充数据表格 (图表双轨)
-            st.markdown("##### 📝 本征参数量化表")
-            df_base = pd.DataFrame(base_metrics)
-            df_base.columns = ["指标", "航空铝合金 7075", "碳纤维 T1000", "输入新材料"]
-            st.dataframe(df_base, use_container_width=True, hide_index=True)
+            with c_bar:
+                st.markdown("##### 核心指标跨维打击力度")
+                for metric in data['multi_dimensional_data']:
+                    df_m = pd.DataFrame({"方案": [metric['baseline_name'], "输入材料"], "数值": [metric['baseline_val'], metric['new_val']]})
+                    fig = px.bar(df_m, x="数值", y="方案", orientation='h', color="方案", text_auto='.2s', height=140,
+                                 color_discrete_map={metric['baseline_name']: "#5a6e7f", "输入材料": "#ff4b4b"})
+                    fig.update_layout(title=metric['metric'], showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
 
             st.divider()
 
-            # ================= II. 零部件仿真计算 (图 + 表 + 公式) =================
-            st.subheader("II. 零部件级代换推演 (Component-Level Simulation)")
-            sim = data.get("component_simulation", {})
-            st.markdown(f"**设定工况：** `{sim.get('part_name')}` | **优化目标：** `{sim.get('design_goal')}`")
+            # ================= II. 缺失参数区间扫掠 (重头戏) =================
+            st.subheader("II. 缺失参数敏感性扫掠矩阵 (Parameter Sweep Analysis)")
+            st.caption("针对未测定或易波动的关键环境/力学指标，系统强制展开多区间推演。")
             
-            with st.container(border=True):
-                st.markdown("##### 📐 力学等效数学推演")
-                st.markdown(sim.get('math_process'))
+            sweeps = data.get("missing_data_sweep", [])
+            for sweep in sweeps:
+                st.markdown(f"#### 🔎 扫掠参数：`{sweep['parameter']}`")
+                cols = st.columns(len(sweep['scenarios']))
+                for i, scene in enumerate(sweep['scenarios']):
+                    with cols[i]:
+                        with st.container(border=True):
+                            st.info(f"**设定区间:** {scene['range']}")
+                            st.write(scene['consequence'])
+
+            st.divider()
+
+            # ================= III. 整机宏观效能折算 =================
+            st.subheader(f"III. {domain} 整机系统级效能折算")
+            sys_impact = data.get("system_level_impact", {})
+            st.markdown(f"**基础前提：** `{sys_impact.get('component_level')}`")
             
-            # 图表并排
-            sim_col_tbl, sim_col_chart = st.columns([1.5, 1])
-            with sim_col_tbl:
-                st.markdown("##### 📊 成型件参数演变表")
-                df_sim = pd.DataFrame(sim.get("table_data", []))
-                df_sim.columns = ["推演参数", "传统基准方案", "新材料代换方案"]
-                st.dataframe(df_sim, use_container_width=True, hide_index=True)
-            with sim_col_chart:
-                # 针对零部件数据的对比柱状图
-                df_sim_chart = pd.DataFrame({
-                    "方案": ["传统基准", "新材料代换"],
-                    "重量 (kg)": [sim.get("chart_base_val"), sim.get("chart_new_val")]
-                })
-                fig_sim = px.bar(df_sim_chart, x="方案", y="重量 (kg)", text="重量 (kg)", color="方案", 
-                                 color_discrete_map={"传统基准": "#7f7f7f", "新材料代换": "#2ca02c"},
-                                 title=sim.get("chart_title"))
-                fig_sim.update_layout(height=250, showlegend=False, margin=dict(l=10, r=10, t=40, b=10))
-                st.plotly_chart(fig_sim, use_container_width=True)
+            # 使用指标卡片展示整机提升
+            effects = sys_impact.get('macro_effects', [])
+            e_cols = st.columns(len(effects))
+            for i, effect in enumerate(effects):
+                with e_cols[i]:
+                    st.metric(label=effect['indicator'], value=effect['improvement'])
+                    st.caption(effect['justification'])
 
             st.divider()
 
-            # ================= III. 5大维度深度剖析 =================
-            st.subheader("III. 核心工程维度深度剖析 (Five-Dimensional Deep Dive)")
-            dims = data.get("five_dimensions_analysis", [])
-            tabs = st.tabs([d['dim'] for d in dims])
-            for i, tab in enumerate(tabs):
-                with tab:
-                    for detail in dims[i]['details']:
-                        st.markdown(f"- {detail}")
-
-            st.divider()
-
-            # ================= IV. 落地案例库 =================
-            st.subheader("IV. 典型部件代换对标案例 (Virtual Case Studies)")
-            cases = data.get("case_studies", [])
-            cols_case = st.columns(len(cases))
-            for i, case in enumerate(cases):
-                with cols_case[i]:
-                    with st.container(border=True):
-                        st.markdown(f"#### ⚙️ {case.get('target_part')}")
-                        st.info(f"**🆚 替代对象:** {case.get('traditional_mat')}\n\n**🛠️ 新方案:** {case.get('new_mat_design')}")
-                        st.success(f"**📈 收益量化:** {case.get('quantified_benefit')}")
-
-            st.divider()
-
-            # ================= V. 全维结案看板 =================
-            st.subheader("V. 首席工程决策看板 (Final Engineering Verdict)")
-            verdict = data.get("final_verdict", {})
+            # ================= IV. 实景案例映射 =================
+            st.subheader("IV. 商业级工程实景映射")
+            case = data.get("real_world_case", {})
             
-            v_col1, v_col2 = st.columns(2)
-            with v_col1:
-                st.success("##### 🌟 核心工程优势 (Core Strengths)")
-                for s in verdict.get('core_strengths', []): st.markdown(f"- {s}")
-                
-                st.info("##### ✅ 强烈推荐应用部件 (Go-Parts)")
-                for g in verdict.get('go_parts', []): st.markdown(f"- 🟢 {g}")
-                
-            with v_col2:
-                st.error("##### ⚠️ 致命物理短板 (Hard Limits)")
-                for w in verdict.get('hard_limits', []): st.markdown(f"- {w}")
-                
-                st.warning("##### 🚫 严禁越线应用部件 (No-Go-Parts)")
-                for ng in verdict.get('no_go_parts', []): st.markdown(f"- 🔴 {ng}")
+            img_col, txt_col = st.columns([1, 1.5])
+            with img_col:
+                # 动态生成占位工业配图，使用者对其产生直观概念
+                keyword = urllib.parse.quote(case.get('image_keyword', 'Engineering'))
+                # 使用 placehold.co 结合关键字生成专业占位图，实际项目中可替换为本地数据库图片
+                img_url = f"https://placehold.co/600x400/2c3e50/ecf0f1?text={keyword}"
+                st.image(img_url, caption="工程部件概念图 (占位)")
+            with txt_col:
+                st.markdown(f"#### {case.get('title')}")
+                st.markdown(case.get('description'))
+                st.info(data.get('conclusion_data_string'))
 
         except Exception as e:
-            st.error(f"引擎过载或网络错误，请重试。追踪: {str(e)}")
+            st.error(f"引擎计算出错: {str(e)}")
