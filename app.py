@@ -6,94 +6,75 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # ================= UI 页面配置 =================
-st.set_page_config(page_title="量化材料评估系统", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="工业级材料量化推演系统", layout="wide", initial_sidebar_state="expanded")
 
-st.title("📊 材料物性与工程应用量化评估系统 (v7.0 数据驱动版)")
-st.caption("基于多维物理模型 | 客观指标拆解 | 量化结构代换计算 | 纯数据驱动")
+st.title("⚙️ 材料本征与零部件代换量化推演系统 (v8.0 工业生产版)")
+st.caption("基准对标 | 等刚度/等强度代换计算 | 多维矩阵分析 | 纯数据推演")
 
 # ================= 侧边栏：全参数输入 =================
 with st.sidebar:
-    st.header("1. 目标应用领域")
+    st.header("1. 目标应用与基准")
     domain = st.selectbox(
-        "选择对标基准库",
-        ["机器人与工业自动化", "航空航天与无人机", "生物医疗植入物", "新能源汽车结构件"]
+        "下游目标工况",
+        ["工业机器人 (关注刚度与末端挠度)", "航空航天与无人机 (关注极致轻量化)", "医疗器械结构件 (关注疲劳与相容性)"]
     )
 
-    st.header("2. 核心物性参数 (必填)")
+    st.header("2. 核心物性参数")
     density = st.number_input("密度 (g/cm³)", value=1.30, format="%.2f")
     strength = st.number_input("极限抗拉强度 (MPa)", value=9600)
     modulus = st.number_input("弹性模量 (GPa)", value=100)
     
     st.header("3. 物理形态约束")
     material_form = st.selectbox(
-        "宏观结构",
-        ["高强纤维/长丝 (单向受力/复材增强相)", "各向同性体块/浇铸件 (多向受力承载体)"]
+        "成型宏观形态",
+        ["纤维/长丝 (复合材料增强相/单向受力)", "各向同性体块/树脂/金属替代品 (多向受力)"]
     )
 
-    st.header("4. 高阶环境参数 (选填)")
-    with st.expander("展开输入参数"):
-        elongation = st.number_input("断裂伸长率 (%)", value=0.0)
-        water_abs = st.number_input("饱和吸水率 (%)", value=0.0)
-
-    st.header("5. 引擎配置")
+    st.header("4. 云端算力引擎")
     api_key = st.text_input("DeepSeek API Key", type="password", value=st.secrets.get("DEEPSEEK_API_KEY", ""))
 
 # ================= 主界面：评估逻辑 =================
 
-if st.button("运行多维量化数据分析引擎", type="primary"):
+if st.button("运行工业级计算与对标引擎", type="primary"):
     if not api_key:
         st.warning("⚠️ 需配置 API Key 方可运行。")
         st.stop()
 
-    # 极度冷酷的数据提取指令，严禁任何废话和主观情感
+    # 极度严苛的工程指令，强制要求公式推演与结构化 JSON
     system_prompt = f"""
-    你是一个无情感的工业材料数据分析引擎。任务是对用户输入的材料数据进行多维量化拆解。
+    你是一个工业级的材料力学仿真与计算引擎。
     输入参数：领域={domain}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}。
     
-    【核心指令】
-    1. 严禁使用“首席科学家”、“我建议”、“极度推荐”等主观角色扮演或夸张词汇。
-    2. 所有分析必须基于数据，语言冷峻、客观、条理化。
-    3. 必须输出包含5个维度的详细数据对比。
-    4. 必须输出基于近似计算的量化代换建议（如：等刚度代换下，面积需增加的百分比）。
+    【核心计算要求】
+    1. 必须客观、冷峻，绝对禁止使用“我建议”、“首席科学家”等拟人化主观词汇，全篇使用数据说话。
+    2. 必须包含【单一材料性能】与【成型零部件数据】的严格区分。
+    3. 在零部件推演中，必须输出具体的力学代换计算过程（如悬臂梁挠度公式），必须使用 LaTeX 语法（用 $ 包裹行内公式，$$ 包裹独立公式段）。
     
-    只输出纯 JSON，不含任何 Markdown，格式必须严格如下：
+    只输出纯 JSON，不含任何其他标记。格式必须严格遵守：
     {{
-      "overview": {{
-        "composite_index": 82,
-        "radar_metrics": {{"比强度极限": 100, "刚度与形变": 55, "抗疲劳潜力": 40, "轻量化效益": 95, "加工良率预估": 50, "环境稳定性": 60}}
+      "radar_score": {{"比强度": 100, "比刚度": 60, "轻量化": 95, "加工容错": 45, "动态疲劳": 50}},
+      "base_materials_comparison": [
+        {{"metric": "绝对强度 (MPa)", "Al7075": 570, "T1000": 3000, "NewMat": {strength}}},
+        {{"metric": "绝对模量 (GPa)", "Al7075": 71, "T1000": 160, "NewMat": {modulus}}},
+        {{"metric": "比强度 (kN·m/kg)", "Al7075": 203, "T1000": 1875, "NewMat": {strength/density}}},
+        {{"metric": "比模量 (GPa·cm³/g)", "Al7075": 25.3, "T1000": 100, "NewMat": {modulus/density}}}
+      ],
+      "component_simulation": {{
+        "part_name": "典型机械臂悬臂梁 (假设长1000mm, 承载100N)",
+        "design_goal": "等刚度代换 (维持相同的末端静态挠度)",
+        "math_process": "根据悬臂梁挠度公式 $$ \\delta = \\frac{{F L^3}}{{3 E I}} $$ 为保证挠度 $\\delta$ 不变，要求 $E_1 I_1 = E_2 I_2$。已知新材料模量 $E_2={modulus}$ GPa，原铝合金 $E_1=71$ GPa。则所需截面惯性矩比值为 $I_2 / I_1 = 71 / {modulus}$。在管径固定的前提下，可精确计算壁厚削减量及最终减重比。",
+        "data_table": [
+          {{"parameter": "目标模量 E (GPa)", "traditional": "71 (铝合金)", "proposed": "{modulus} (新材料)"}},
+          {{"parameter": "等效截面惯性矩 I", "traditional": "基准值 1.0 I", "proposed": "0.71 I (需削减壁厚)"}},
+          {{"parameter": "成型部件总重 (预估)", "traditional": "4.25 kg", "proposed": "1.35 kg (减重约 68%)"}}
+        ]
       }},
-      "detailed_dimensions": [
-        {{
-          "dim_name": "静态承载极限",
-          "score": 95,
-          "chart_data": [
-            {{"material": "输入材料", "metric": "比强度(kN·m/kg)", "value": 7384}},
-            {{"material": "航空铝7075", "metric": "比强度(kN·m/kg)", "value": 203}},
-            {{"material": "碳纤维T1000", "metric": "比强度(kN·m/kg)", "value": 1875}}
-          ],
-          "objective_analysis": ["数据分析点1(带具体数字倍数)", "数据分析点2"]
-        }},
-        // 必须按此结构严格补充另外4个维度：
-        // "刚度与挠度控制" (对比绝对模量)
-        // "动态与疲劳预估" (对比伸长率或理论疲劳极限)
-        // "轻量化效能" (对比密度)
-        // "制造与工艺约束" (根据形态，列出加工难点)
+      "multi_angle_analysis": [
+        {{"angle": "静态承载效能", "detail": "数据点1；数据点2"}},
+        {{"angle": "动态变形控制", "detail": "数据点1；数据点2"}},
+        {{"angle": "成型工艺数据约束", "detail": "针对形态的具体加工参数约束"}}
       ],
-      "quantitative_guidelines": [
-        {{"scenario": "等刚度代换铝合金(受弯截面)", "data_support": "因模量为100GPa(高于铝的71GPa)，同等截面下挠度将减少约29%；若追求极限减重，管壁厚度可缩减约15%。"}},
-        {{"scenario": "等强度代换钢索(受拉结构)", "data_support": "强度达9600MPa，承载横截面积理论上可缩小至高强钢丝的1/4，重量缩减超80%。"}}
-      ],
-      "case_comparisons": [
-        {{
-          "application": "机械臂主承力骨架",
-          "traditional_solution": "7075铝合金管材",
-          "traditional_data": "密度2.8, 模量71GPa, 壁厚3mm",
-          "proposed_solution": "新材料纤维缠绕复合管",
-          "proposed_data": "密度1.3, 模量100GPa, 建议壁厚2.5mm以匹配原抗扭刚度",
-          "net_benefit": "总成减重约58%，末端静挠度降低10%"
-        }},
-        {{"application": "案例2名称", "traditional_solution": "传统方案", "traditional_data": "数据", "proposed_solution": "新方案", "proposed_data": "数据", "net_benefit": "收益"}}
-      ]
+      "final_conclusion": "纯数据总结：该材料在某指标上提升X倍，但在某指标上存在Y的硬伤。综合判定其最佳适用部件为Z。"
     }}
     """
 
@@ -102,93 +83,88 @@ if st.button("运行多维量化数据分析引擎", type="primary"):
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
     payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.1}
 
-    with st.spinner(f"引擎正在运行多维量化矩阵计算与案例推演..."):
+    with st.spinner("算力引擎启动：正在进行本征参数对标与零部件等效计算..."):
         try:
             response = requests.post(API_URL, headers=headers, json=payload, timeout=90)
             response.raise_for_status()
-            raw_text = response.json()['choices'][0]['message']['content']
-            clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
+            clean_json_str = response.json()['choices'][0]['message']['content'].replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_json_str)
             
-            st.success("✅ 量化分析完成。")
+            st.success("✅ 物理建模与代换计算完成。")
             
-            # ================= 1. 顶层看板 =================
-            col_idx, col_radar = st.columns([1, 2.5])
-            with col_idx:
-                st.metric("综合物性指数", f"{data['overview']['composite_index']} / 100")
-                st.caption(f"标定基准: {domain}")
-                st.caption(f"评估形态: {material_form.split(' ')[0]}")
+            # ================= 1. 顶层仪表盘 =================
+            st.subheader("I. 材料多维本征参数对标 (Base Material Properties)")
+            
+            col_radar, col_charts = st.columns([1, 2.5])
+            
             with col_radar:
-                radar_metrics = data['overview']['radar_metrics']
-                df_radar = pd.DataFrame(dict(r=list(radar_metrics.values()), theta=list(radar_metrics.keys())))
-                fig_radar = px.line_polar(df_radar, r='r', theta='theta', line_close=True, height=300)
-                fig_radar.update_traces(fill='toself', line_color='#2ca02c') # 使用理性的绿色
-                fig_radar.update_layout(margin=dict(l=40, r=40, t=20, b=20), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                radar_data = data['radar_score']
+                df_radar = pd.DataFrame(dict(r=list(radar_data.values()), theta=list(radar_data.keys())))
+                fig_radar = px.line_polar(df_radar, r='r', theta='theta', line_close=True, title="综合能力图谱")
+                fig_radar.update_traces(fill='toself', line_color='#1f77b4')
+                fig_radar.update_layout(margin=dict(l=30, r=30, t=40, b=20), height=350)
                 st.plotly_chart(fig_radar, use_container_width=True)
 
-            st.markdown("---")
-
-            # ================= 2. 多维客观数据切片 =================
-            st.markdown("### 📊 独立维度数据对标")
-            dimensions = data.get("detailed_dimensions", [])
-            if dimensions:
-                tabs = st.tabs([d['dim_name'] for d in dimensions])
-                for i, tab in enumerate(tabs):
-                    with tab:
-                        dim = dimensions[i]
-                        c1, c2 = st.columns([1.2, 1])
-                        
-                        with c1:
-                            # 渲染当前维度的精细柱状图
-                            df_chart = pd.DataFrame(dim['chart_data'])
-                            if not df_chart.empty:
-                                metric_name = df_chart['metric'].iloc[0]
-                                # 颜色映射：输入材料为突出的红色，基准为灰色系
-                                color_map = {row['material']: '#d62728' if '输入' in row['material'] else '#7f7f7f' for _, row in df_chart.iterrows()}
-                                
-                                fig_bar = px.bar(
-                                    df_chart, y="material", x="value", orientation='h',
-                                    text="value", color="material", color_discrete_map=color_map,
-                                    height=250
-                                )
-                                fig_bar.update_layout(
-                                    showlegend=False, xaxis_title=metric_name, yaxis_title="",
-                                    margin=dict(l=0, r=0, t=10, b=0)
-                                )
-                                st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                        with c2:
-                            st.markdown(f"**客观项评分：{dim['score']}/100**")
-                            for point in dim['objective_analysis']:
-                                st.markdown(f"- {point}")
-
-            st.markdown("---")
-
-            # ================= 3. 量化代换计算与设计指导 =================
-            st.markdown("### 📐 量化结构代换指导 (Quantitative Guidelines)")
-            st.caption("基于理论力学公式的近似结构补偿测算")
-            df_guidelines = pd.DataFrame(data.get("quantitative_guidelines", []))
-            if not df_guidelines.empty:
-                df_guidelines.columns = ["应用场景/代换目标", "量化测算数据与设计支撑"]
-                # 使用 DataFrame 的表格化展示，去情感化
-                st.dataframe(df_guidelines, use_container_width=True, hide_index=True)
-
-            st.markdown("---")
-
-            # ================= 4. 具体部件应用案例对比 =================
-            st.markdown("### 📋 虚拟对标案例研究 (Case Comparisons)")
-            cases = data.get("case_comparisons", [])
-            for case in cases:
-                with st.expander(f"案例对标：{case.get('application', '未知应用')}", expanded=True):
-                    col_t, col_p = st.columns(2)
-                    with col_t:
-                        st.markdown("#### 🟦 现役基准方案")
-                        st.info(f"**材料：** {case.get('traditional_solution')}\n\n**数据支撑：** {case.get('traditional_data')}")
-                    with col_p:
-                        st.markdown("#### 🟥 导入新材料方案")
-                        st.error(f"**材料：** {case.get('proposed_solution')}\n\n**数据支撑：** {case.get('proposed_data')}")
+            with col_charts:
+                # 矩阵化图表：将 4 个基础指标分为 2x2 网格
+                base_comps = data['base_materials_comparison']
+                if len(base_comps) >= 4:
+                    row1_col1, row1_col2 = st.columns(2)
+                    row2_col1, row2_col2 = st.columns(2)
                     
-                    st.success(f"**💡 量化净收益预估 (Net Benefit)：** {case.get('net_benefit')}")
+                    def plot_mini_bar(metric_dict, container):
+                        df_m = pd.DataFrame({
+                            "Material": ["铝合金7075", "碳纤维T1000", "输入新材料"],
+                            "Value": [metric_dict['Al7075'], metric_dict['T1000'], metric_dict['NewMat']]
+                        })
+                        fig = px.bar(df_m, x="Material", y="Value", text_auto='.2s', color="Material",
+                                     color_discrete_map={"铝合金7075": "#a6b8c7", "碳纤维T1000": "#5a6e7f", "输入新材料": "#d62728"})
+                        fig.update_layout(title=metric_dict['metric'], showlegend=False, height=200, margin=dict(l=10, r=10, t=30, b=10))
+                        container.plotly_chart(fig, use_container_width=True)
+
+                    plot_mini_bar(base_comps[0], row1_col1)
+                    plot_mini_bar(base_comps[1], row1_col2)
+                    plot_mini_bar(base_comps[2], row2_col1)
+                    plot_mini_bar(base_comps[3], row2_col2)
+
+            st.divider()
+
+            # ================= 2. 零部件仿真计算过程 =================
+            st.subheader("II. 零部件级代换推演与计算过程 (Component-Level Simulation)")
+            sim = data.get("component_simulation", {})
+            
+            st.markdown(f"**设定工况：** `{sim.get('part_name')}`")
+            st.markdown(f"**优化目标：** `{sim.get('design_goal')}`")
+            
+            # 展示硬核数学推导过程 (LaTeX 支持)
+            with st.container(border=True):
+                st.markdown("##### 📐 力学代换推导过程")
+                st.markdown(sim.get('math_process'))
+            
+            # 零部件成型后的数据对比表格
+            st.markdown("##### 📊 成型零部件物理参数对比")
+            df_sim = pd.DataFrame(sim.get("data_table", []))
+            df_sim.columns = ["对比参数", "基准材料方案", "新材料代换方案"]
+            st.dataframe(df_sim, use_container_width=True, hide_index=True)
+
+            st.divider()
+
+            # ================= 3. 多维角度客观评述 =================
+            st.subheader("III. 多维角度客观评价 (Multi-Angle Evaluation)")
+            cols_angle = st.columns(len(data.get("multi_angle_analysis", [])))
+            for i, angle in enumerate(data.get("multi_angle_analysis", [])):
+                with cols_angle[i]:
+                    st.info(f"**{angle['angle']}**")
+                    # 将分号分隔的文本转为项目符号列表
+                    points = angle['detail'].split('；')
+                    for p in points:
+                        if p.strip(): st.markdown(f"- {p.strip()}")
+
+            st.divider()
+
+            # ================= 4. 最终数据总结论 =================
+            st.subheader("IV. 最终工程判定数据看板 (Final Data Verdict)")
+            st.success(data.get('final_conclusion'))
 
         except Exception as e:
-            st.error(f"系统运行异常。请检查参数或重试。异常明细: {str(e)}")
+            st.error(f"计算中断，请重试。错误追踪: {str(e)}")
