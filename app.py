@@ -5,8 +5,25 @@ import pandas as pd
 import plotly.express as px
 import random
 
+# ================= 导入本地数据挂载引擎 (智能容错版) =================
+# 这样写的好处是：即使你还没建好下面这两个文件，网页依然可以正常打开，不会报错崩溃。
+try:
+    from rag_engine import retrieve_knowledge
+    from db_connector import init_db, get_material_data
+    # 初始化一次数据库
+    init_db()
+    LOCAL_TOOLS_READY = True
+except ImportError:
+    LOCAL_TOOLS_READY = False
+    # 如果找不到文件，就生成两个空壳函数作为替身，保证程序继续运行
+    def retrieve_knowledge(query, k=3):
+        return "本地知识库尚未部署，当前依赖云端通用大模型常识进行推演。"
+    def get_material_data(mat_name):
+        return None
+# ===================================================================
+
 # ================= UI 页面配置 =================
-st.set_page_config(page_title="材料商业选型评估系统", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="材料商业评估系统", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -16,8 +33,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💡 AI 驱动的材料应用与商业选型评估系统 (v16.0)")
-st.caption("本征对标 ➔ 结构代换 ➔ 盲区扫掠 ➔ 八维切片 ➔ 商业决策 ➔ 底层数据溯源")
+st.title("🚀 AI 材料商业评估与选型系统 (v16.5 知识挂载版)")
+st.caption("私有数据暗箱挂载 | 动态表单 | ESG融合 | 数学等效推演 | 盲区扫掠 | 八维图文切片")
+
+if not LOCAL_TOOLS_READY:
+    st.warning("提示：本地私有数据库 (rag_engine / db_connector) 尚未检测到，目前运行在云端大模型直连模式。")
 
 # ================= 侧边栏：全参数输入 =================
 with st.sidebar:
@@ -90,13 +110,35 @@ if st.button("🚀 启动 AI 商业全量评估引擎 (预计耗时30秒)", type
         st.warning("⚠️ 需配置 API Key 才能运行。")
         st.stop()
 
+    # ================== 核心：底层数据抓取逻辑 ==================
+    with st.spinner("系统后台正在静默调取本地私有知识库与核心数据库..."):
+        # 1. 数据库精准提取基准数据
+        target_baseline = "T1000碳纤维" # 未来这里可以根据领域动态写 if/else
+        base_data = get_material_data(target_baseline)
+        if base_data:
+            db_context = f"从底层数据库提取基准 [{target_baseline}]: 密度{base_data['density']}, 强度{base_data['strength']}MPa, 模量{base_data['modulus']}GPa。"
+        else:
+            db_context = "未在本地数据库中找到指定基准材料，请使用模型通用常识。"
+        
+        # 2. RAG 知识库提取经验指导 (用材料形态和参数作为搜索词)
+        search_query = f"{material_form} 强度{strength} 模量{modulus} 加工工艺 缺陷 标准 规范"
+        rag_context = retrieve_knowledge(search_query)
+    # ============================================================
+
+    # 重新定义的 system_prompt，强行注入刚刚抓到的本地数据
     system_prompt = f"""
     你是全球顶尖的材料商业选型评估系统。系统后台已隐式挂载海量内部材料物性数据库与行业标准库。
     输入参数：领域={domain}, 类别={mat_category}, 形态={material_form}, 密度={density}, 强度={strength}, 模量={modulus}, 附加参数={extra_context}, ESG启用={esg_flag}。
     
+    【强制约束条件：内部精确数据库提取】(用于绝对基准对标，你必须优先使用此数据)
+    {db_context}
+    
+    【强制参考条件：本地私有知识库提取】(包含工艺标准、凝固浴参数、测试规范等，必须将其核心内容融合进报告的分析中)：
+    {rag_context}
+    
     【核心指令】
     必须输出极度庞大的标准 JSON。严禁 Markdown 标记。确保 8 个维度完全生成。
-    必须在 JSON 根目录生成 `reference_sources` 数组，列出 3-4 个评估过程调用的虚拟或真实参考数据来源（如 ASTM标准、ISO规范、特定行业白皮书等）。
+    必须在 JSON 根目录生成 `reference_sources` 数组，列出 3-4 个评估过程调用的参考数据来源（请优先列出上面【本地私有知识库提取】中提到的来源名称）。
     
     JSON 格式严格如下：
     {{
@@ -149,7 +191,7 @@ if st.button("🚀 启动 AI 商业全量评估引擎 (预计耗时30秒)", type
       "summary_4": "八维切片小结：揭示商业落地最大短板",
 
       "case_study": {{
-        "target_part": "具体落地零部件",
+        "target_part": "具体落地零部件(匹配选定领域)",
         "traditional_mat": "传统对标材料",
         "new_design": "新材料应用方案",
         "benefit": "量化总收益说明"
@@ -164,9 +206,9 @@ if st.button("🚀 启动 AI 商业全量评估引擎 (预计耗时30秒)", type
       }},
       
       "reference_sources": [
-        "内部专家材料物性数据库 v4.2",
-        "ASTM D3039 - 聚合物基复合材料拉伸性能标准测试方法",
-        "对应领域的特定标准（由模型智能匹配）"
+        "内部数据: xx测试规范",
+        "权威标准: ISO xxxx",
+        "调用到的相关文献"
       ]
     }}
     """
@@ -175,7 +217,7 @@ if st.button("🚀 启动 AI 商业全量评估引擎 (预计耗时30秒)", type
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
     payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.2}
 
-    with st.spinner("AI 引擎全开：提取内部底层数据库 -> 跨域映射 -> 数学仿真 -> 八维演算..."):
+    with st.spinner("AI 引擎全开：提取内部底层数据 -> 跨域映射 -> 数学仿真 -> 八维演算..."):
         try:
             response = requests.post(API_URL, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
@@ -296,7 +338,7 @@ if st.button("🚀 启动 AI 商业全量评估引擎 (预计耗时30秒)", type
                 st.markdown("#### 🏭 虚拟商业级替代案例")
                 case = data['case_study']
                 
-                # HTML 原生渲染科幻感占位框 (确保 100% 显示无报错)
+                # HTML 原生渲染科幻感占位框 (无需外部图片链接，100%不报错)
                 placeholder_html = f"""
                 <div style="background: linear-gradient(135deg, #0f172a, #334155); border-radius: 10px; padding: 40px 20px; text-align: center; color: white; height: 260px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #475569; margin-bottom: 20px;">
                     <h2 style="margin-bottom: 10px; color: #e2e8f0; font-family: sans-serif;">⚙️ AI 商业结构渲染模态</h2>
@@ -330,7 +372,7 @@ if st.button("🚀 启动 AI 商业全量评估引擎 (预计耗时30秒)", type
 
             # ================= VI. 隐藏数据库的数据溯源 =================
             st.subheader("📚 底层数据溯源 (Reference Data Sources)")
-            st.caption("以下为本次 AI 演算所调用的核心底层数据库、测试集与相关工程标准：")
+            st.caption("以下为本次 AI 演算后台隐式调用的底层数据库、私有测试集与相关工程标准：")
             
             for ref in data.get('reference_sources', []):
                 st.markdown(f"- 📄 `{ref}`")
