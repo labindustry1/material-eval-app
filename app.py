@@ -272,7 +272,7 @@ DOMAIN_CONFIG = {
 st.title("🚀 材料特性在具体应用领域中的使用可行性评估系统")
 st.markdown("<style>.stTabs [data-baseweb='tab-list'] {gap: 6px;} .stTabs [data-baseweb='tab'] {background-color: #f0f2f6; font-weight: bold;} .stTabs [aria-selected='true'] {background-color: #000; color: white;}</style>", unsafe_allow_html=True)
 
-# ================= 侧边栏：配置与混合律 (Rule of Mixtures) =================
+# ================= 侧边栏：复合材料与零件输入 =================
 with st.sidebar:
     st.header("1. 目标终端零部件")
     domain = st.selectbox("选择应用领域", list(DOMAIN_CONFIG.keys()))
@@ -423,5 +423,155 @@ if generate_btn:
             res = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload, timeout=120)
             res.raise_for_status()
             raw_content = res.json()['choices'][0]['message']['content']
-            # 清除前后多余格式
-            if "
+            
+            # 清除前后多余格式，确保完美解析 JSON
+            if "```json" in raw_content: 
+                raw_content = raw_content.split("```json")[1].split("```")[0]
+            elif "```" in raw_content: 
+                raw_content = raw_content.split("```")[1].split("```")[0]
+                
+            st.session_state["llm_report"] = json.loads(raw_content.strip())
+            st.success(f"✅ 【{target_part}】大语言模型深度论证及数据推演成功！")
+        except Exception as e:
+            st.error(f"模型通讯中断或生成格式异常，请稍后重试: {str(e)}")
+
+
+# ================= 🌟 视图渲染引擎 🌟 =================
+if st.session_state["llm_report"]:
+    data = st.session_state["llm_report"]
+    
+    # ---------------- 顶层板块：市场定位与 多维交互工程沙盒 ----------------
+    st.markdown(f"<h1 style='text-align: center; color: #000;'>🏆 市场定位评估：{data['market_positioning']['tier']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align: center; color: #4a4a4a;'>{data['market_positioning']['verdict']}</h4><hr>", unsafe_allow_html=True)
+    
+    # 让图纸有单独的版面
+    st.markdown(f"### ⚙️ 【{target_part}】实时动态工程沙盒")
+    st.caption("👈 滑动修改下方尺寸参数，右侧【多维物理工况仪表盘】与【3D拓扑图纸】将以 60FPS 零延迟同步刷新")
+    
+    col_input, col_draw, col_dash = st.columns([1, 1, 1.2])
+    
+    current_dims = {}
+    with col_input:
+        st.markdown("#### 1. 结构尺寸调节")
+        for item in part_config["ui_inputs"]:
+            # 沙盒输入交互，改变这里，不触发模型重跑
+            current_dims[item["key"]] = st.slider(item["label"], item["min"], item["max"], item["default"], key=f"ds_{item['key']}")
+        
+        st.markdown("#### 2. 竞品博弈")
+        st.write(data['market_positioning']['competitor_compare'])
+
+    with col_draw:
+        st.markdown("#### 3. 3D 拓扑蓝图")
+        # 实时渲染 3D
+        st.plotly_chart(render_3d_blueprint(part_config["topology"], current_dims), use_container_width=True)
+
+    with col_dash:
+        st.markdown("#### 4. 多维极限工况实时仪表盘")
+        # 实时物理推算
+        physics_df = calculate_physics(part_config["topology"], current_dims, final_strength, final_modulus, final_density)
+        
+        # 动态条形图呈现多维度数据
+        fig_dash = px.bar(
+            physics_df, x="数值", y="指标", orientation='h', text_auto='.3s', 
+            color="指标", color_discrete_sequence=px.colors.sequential.Greys_r
+        )
+        fig_dash.update_layout(showlegend=False, height=300, margin=dict(l=10, r=20, t=10, b=10))
+        st.plotly_chart(fig_dash, use_container_width=True)
+
+    st.markdown("---")
+    
+    # ---------------- 底层板块：v19 全系硬核分析报告保留 ----------------
+    
+    # 模块 I
+    st.subheader("I. 综合本征参数与多维潜力对标")
+    c_radar, c_bars = st.columns([1, 2.5])
+    with c_radar:
+        df_radar = pd.DataFrame(dict(r=list(data['radar'].values()), theta=list(data['radar'].keys())))
+        fig_rd = px.line_polar(df_radar, r='r', theta='theta', line_close=True)
+        fig_rd.update_traces(fill='toself', line_color='black')
+        st.plotly_chart(fig_rd.update_layout(margin=dict(t=30, b=10)), use_container_width=True)
+
+    with c_bars:
+        r1c1, r1c2 = st.columns(2)
+        r2c1, r2c2 = st.columns(2)
+        cols_b = [r1c1, r1c2, r2c1, r2c2]
+        for idx, md in enumerate(data['base_metrics']):
+            df_b = pd.DataFrame({"方案": ["现役基准A", "现役基准B", "本案材料"], "数值": [md['Base1'], md['Base2'], md['NewMat']]})
+            fig_b = px.bar(df_b, x="方案", y="数值", text_auto='.2s', color="方案", color_discrete_sequence=["#d3d3d3", "#a9a9a9", "#000000"])
+            fig_b.update_layout(title=md['metric'], showlegend=False, height=180, margin=dict(l=10, r=10, t=30, b=10))
+            cols_b[idx].plotly_chart(fig_b, use_container_width=True)
+    st.info(f"**📌 阶段小结：** {data.get('summary_1', '本征参数已核算完毕。')}")
+    st.divider()
+
+    # 模块 II
+    st.subheader("II. 结构数学代换与效能核算")
+    sim = data['math_sim']
+    st.markdown(f"**🎯 核心等效代换目标:** `{sim['design_goal']}`")
+    with st.container(border=True):
+        st.markdown("理论推导公式：")
+        st.markdown(sim['math_latex'])
+    
+    sc1, sc2 = st.columns([1.5, 1])
+    with sc1:
+        df_sim = pd.DataFrame(sim["table"]).rename(columns={"param": "代换关键参数", "base": "现役基准", "new": "方案推演值"})
+        st.dataframe(df_sim, use_container_width=True, hide_index=True)
+    with sc2:
+        df_wt = pd.DataFrame({"方案": ["现役基准", "新设计"], "综合效能": [sim['chart_vals']['base_wt'], sim['chart_vals']['new_wt']]})
+        fig_wt = px.bar(df_wt, x="方案", y="综合效能", color="方案", text="综合效能", height=200, color_discrete_map={"现役基准": "#7f7f7f", "新设计": "#000000"})
+        fig_wt.update_layout(showlegend=False, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig_wt, use_container_width=True)
+    st.info(f"**📌 阶段小结：** {data.get('summary_2', '等效代换论证完成。')}")
+    st.divider()
+
+    # 模块 III
+    st.subheader("III. 领域核心风险与衰减预演")
+    swp_c1, swp_c2 = st.columns(2)
+    with swp_c1:
+        with st.container(border=True):
+            sw1 = data['parameter_sweep']['sweep_1']
+            fig_s1 = px.bar(pd.DataFrame(sw1['chart_data']), x="x", y="y", title=sw1['chart_title'], height=220, color_discrete_sequence=['#4a4a4a'])
+            fig_s1.update_layout(margin=dict(l=10,r=10,t=40,b=10))
+            st.plotly_chart(fig_s1, use_container_width=True)
+            for sc in sw1['scenarios']: st.markdown(f"- **{sc['range']}**: {sc['desc']}")
+    with swp_c2:
+        with st.container(border=True):
+            sw2 = data['parameter_sweep']['sweep_2']
+            fig_s2 = px.line(pd.DataFrame(sw2['chart_data']), x="x", y="y", markers=True, title=sw2['chart_title'], height=220, color_discrete_sequence=['#000000'])
+            fig_s2.update_layout(margin=dict(l=10,r=10,t=40,b=10))
+            st.plotly_chart(fig_s2, use_container_width=True)
+            for sc in sw2['scenarios']: st.markdown(f"- **{sc['range']}**: {sc['desc']}")
+    st.info(f"**📌 阶段小结：** {data.get('summary_3', '极端工况风险排查完成。')}")
+    st.divider()
+
+    # 模块 IV
+    st.subheader("IV. 商业级八维全生命周期剖析")
+    dims = data['eight_dimensions']
+    tabs = st.tabs([d['dim'] for d in dims])
+    for i, tab in enumerate(tabs):
+        with tab:
+            tc1, tc2 = st.columns([1.5, 1])
+            with tc1:
+                st.markdown("#### 🔍 深度定性论证")
+                for d in dims[i]['details']: st.markdown(f"- {d}")
+            with tc2:
+                df_tab = pd.DataFrame({"对标对象": ["现役基准", "本案设计"], "表现数值": [dims[i]['base_val'], dims[i]['new_val']]})
+                fig_tab = px.bar(df_tab, x="表现数值", y="对标对象", orientation='h', text="表现数值", color="对标对象", color_discrete_sequence=["#a9a9a9", "#000000"], title=dims[i]['chart_metric'])
+                fig_tab.update_layout(showlegend=False, height=180, margin=dict(l=10,r=10,t=40,b=10))
+                st.plotly_chart(fig_tab, use_container_width=True)
+    st.info(f"**📌 阶段小结：** {data.get('summary_4', '八维切片展示了系统的全生命周期优势与短板。')}")
+    st.divider()
+
+    # 模块 V
+    st.subheader("V. 结案决议与隐藏数据溯源")
+    verdict = data['grand_verdict']
+    st.success(f"**⚖️ 商业落地决议：** {verdict['summary']}")
+    v_in1, v_in2 = st.columns(2)
+    with v_in1:
+        st.markdown("##### 🌟 核心投产优势")
+        for s in verdict['strengths']: st.markdown(f"✔️ {s}")
+    with v_in2:
+        st.markdown("##### ⚠️ 致命工程短板与风险")
+        for w in verdict['weaknesses']: st.markdown(f"❌ {w}")
+        
+    st.markdown("#### 📚 核心数据底层来源 (Data Origins)")
+    for ref in data.get('reference_sources', []): st.markdown(f"- 🔗 **{ref}**")
