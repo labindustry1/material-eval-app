@@ -46,8 +46,9 @@ except ImportError:
 def search_tavily(query, api_key):
     if not api_key: return "未配置 Tavily API Key"
     try:
+        # 【修复点】：去掉了多余的 markdown 链接格式
         res = requests.post(
-            "[https://api.tavily.com/search](https://api.tavily.com/search)", 
+            "https://api.tavily.com/search", 
             json={"api_key": api_key, "query": query, "search_depth": "advanced", "include_answer": True, "max_results": 3}, 
             timeout=15
         ).json()
@@ -434,7 +435,8 @@ if generate_btn:
         payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.15}
         
         try:
-            res = requests.post("[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)", headers=headers, json=payload, timeout=120)
+            # 【修复点】：去掉了多余的 markdown 链接格式
+            res = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload, timeout=120)
             res.raise_for_status()
             raw_content = res.json()['choices'][0]['message']['content']
             
