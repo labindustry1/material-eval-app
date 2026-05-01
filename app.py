@@ -47,7 +47,7 @@ def search_tavily(query, api_key):
     if not api_key: return "未配置 Tavily API Key"
     try:
         res = requests.post(
-            "https://api.tavily.com/search", 
+            "[https://api.tavily.com/search](https://api.tavily.com/search)", 
             json={"api_key": api_key, "query": query, "search_depth": "advanced", "include_answer": True, "max_results": 3}, 
             timeout=15
         ).json()
@@ -75,10 +75,10 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         deflection = (bending_load * L**3) / (3 * E * I) if I>0 else 0
         
         results = [
-            {"指标": "总重量评估 (kg)", "数值": weight},
-            {"指标": "理论抗弯极值 (N)", "数值": bending_load},
-            {"指标": "轴向抗压极值 (N)", "数值": compression},
-            {"指标": "极限受力挠度 (mm)", "数值": deflection}
+            {"指标": "结构总重量估算 (kg)", "数值": weight},
+            {"指标": "理论抗弯极限极值 (N)", "数值": bending_load},
+            {"指标": "轴向抗压承载极限 (N)", "数值": compression},
+            {"指标": "极限弹性挠度极值 (mm)", "数值": deflection}
         ]
         
     elif topology == "PLATE":
@@ -92,10 +92,10 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         deflection = (punch_load * L**3) / (48 * E * I) if I>0 else 0
         
         results = [
-            {"指标": "总重量评估 (kg)", "数值": weight},
-            {"指标": "中心抗冲压极限 (N)", "数值": punch_load},
-            {"指标": "边缘抗剪切力 (N)", "数值": shear_load},
-            {"指标": "冲压形变容限 (mm)", "数值": deflection}
+            {"指标": "结构总重量估算 (kg)", "数值": weight},
+            {"指标": "中心点抗冲压极限 (N)", "数值": punch_load},
+            {"指标": "边缘面抗剪切极限 (N)", "数值": shear_load},
+            {"指标": "最大冲压形变容限 (mm)", "数值": deflection}
         ]
         
     elif topology == "CORRUGATED":
@@ -109,10 +109,10 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         crush_energy = S * V * 0.4 # 吸能系数
         
         results = [
-            {"指标": "总重量评估 (kg)", "数值": weight},
-            {"指标": "波纹等效抗弯 (N)", "数值": bending_load},
-            {"指标": "压溃吸能极值 (J)", "数值": crush_energy / 1000},
-            {"指标": "刚度提升比 (倍)", "数值": 3.0}
+            {"指标": "结构总重量估算 (kg)", "数值": weight},
+            {"指标": "波纹截面等效抗弯 (N)", "数值": bending_load},
+            {"指标": "整体压溃吸能极值 (J)", "数值": crush_energy / 1000},
+            {"指标": "结构刚度提升比 (倍)", "数值": 3.2}
         ]
         
     elif topology == "STRAP":
@@ -126,55 +126,86 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         elongation = (tensile_load * L_ref) / (E * area) if area>0 else 0
         
         results = [
-            {"指标": "每米重量 (kg/m)", "数值": weight},
-            {"指标": "单向拉断极值 (N)", "数值": tensile_load},
-            {"指标": "极限量程伸长 (mm/m)", "数值": elongation},
-            {"指标": "承重冗余系数", "数值": 2.5}
+            {"指标": "标准每米重量 (kg/m)", "数值": weight},
+            {"指标": "截面单向拉断极值 (N)", "数值": tensile_load},
+            {"指标": "极限量程伸缩度 (mm/m)", "数值": elongation},
+            {"指标": "理论承重安全冗余", "数值": 2.5}
         ]
 
     return pd.DataFrame(results)
 
-# ================= 🌟 核心引擎 2：3D 工程绘图 🌟 =================
-def render_3d_blueprint(topology, dims):
-    """根据拓扑动态绘制带数据标注的黑白线框图"""
+# ================= 🌟 核心引擎 2：双 3D 绘图引擎 (宏观 + 微观特征) 🌟 =================
+def render_3d_blueprint(topology, dims, view_type="macro"):
+    """根据拓扑动态绘制黑白线框图，支持宏观轮廓和微观特征双视图"""
     fig = go.Figure()
     
     if topology == "BEAM":
         L, D = dims['length'], dims['diameter']
-        theta = np.linspace(0, 2*np.pi, 30)
-        z = np.linspace(0, L, 10)
-        theta, z = np.meshgrid(theta, z)
-        x = (D/2) * np.cos(theta)
-        y = (D/2) * np.sin(theta)
-        fig.add_trace(go.Surface(x=x, y=y, z=z, colorscale='Greys', opacity=0.9, showscale=False))
-        fig.update_layout(title="📐 3D 渲染: 连杆/管状结构")
-        
+        if view_type == "macro":
+            theta, z = np.meshgrid(np.linspace(0, 2*np.pi, 20), np.linspace(0, L, 10))
+            fig.add_trace(go.Surface(x=(D/2)*np.cos(theta), y=(D/2)*np.sin(theta), z=z, colorscale='Greys', opacity=0.9, showscale=False))
+            title_text = "📐 宏观外观: 管材/连杆结构"
+        else: # 微观：显示管壁厚度截面
+            t = dims['thickness']
+            d_inner = max(0.1, D - 2*t)
+            theta = np.linspace(0, 2*np.pi, 30)
+            x_out, y_out = (D/2)*np.cos(theta), (D/2)*np.sin(theta)
+            x_in, y_in = (d_inner/2)*np.cos(theta), (d_inner/2)*np.sin(theta)
+            fig.add_trace(go.Scatter3d(x=x_out, y=y_out, z=np.zeros_like(x_out), mode='lines', line=dict(color='black', width=4), name='外径'))
+            fig.add_trace(go.Scatter3d(x=x_in, y=y_in, z=np.zeros_like(x_in), mode='lines', line=dict(color='grey', width=4), name='内径'))
+            fig.add_trace(go.Mesh3d(x=np.concatenate([x_out, x_in]), y=np.concatenate([y_out, y_in]), z=np.zeros(60), color='lightgrey', opacity=0.5))
+            title_text = "🔍 截面特征: 管壁厚度展示"
+            
     elif topology == "PLATE":
         L, W, t = dims['length'], dims['width'], dims['thickness']
-        x = [0, L, L, 0, 0, L, L, 0]
-        y = [0, 0, W, W, 0, 0, W, W]
-        z = [0, 0, 0, 0, t, t, t, t]
-        fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=1.0, flatshading=True))
-        fig.update_layout(title="📐 3D 渲染: 护甲/平板结构")
-        
+        if view_type == "macro":
+            x = [0, L, L, 0, 0, L, L, 0]
+            y = [0, 0, W, W, 0, 0, W, W]
+            z = [0, 0, 0, 0, 10, 10, 10, 10] # 夸张厚度便于宏观查看
+            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=0.9, flatshading=True))
+            title_text = "📐 宏观外观: 整体防护板廓"
+        else: # 微观：真实厚度侧面放大
+            x = [0, 100, 100, 0, 0, 100, 100, 0]
+            y = [0, 0, 50, 50, 0, 0, 50, 50]
+            z = [0, 0, 0, 0, t, t, t, t]
+            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='grey', opacity=1.0, flatshading=True))
+            title_text = "🔍 局部特征: 真实厚度截面"
+            
     elif topology == "CORRUGATED":
         L, W, t = dims['length'], dims['width'], dims['thickness']
-        X = np.linspace(0, L, 50)
-        Y = np.linspace(0, W, 20)
-        X, Y = np.meshgrid(X, Y)
-        # 用正弦函数生成漂亮的波纹底板
-        Z = (t * 2) * np.sin(X / L * 8 * np.pi) 
-        fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Greys', opacity=0.8, showscale=False))
-        fig.update_layout(title="📐 3D 渲染: 波纹/缓冲吸能结构")
-        
+        if view_type == "macro":
+            # 宏观就是一个大板子
+            x = [0, L, L, 0, 0, L, L, 0]
+            y = [0, 0, W, W, 0, 0, W, W]
+            h_macro = t * 3
+            z = [0, 0, 0, 0, h_macro, h_macro, h_macro, h_macro]
+            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=0.8, flatshading=True))
+            title_text = "📐 宏观外观: 电池护板整体轮廓"
+        else:
+            # 微观是波纹
+            X = np.linspace(0, min(L, 300), 50) # 取局部渲染波纹
+            Y = np.linspace(0, min(W, 300), 20)
+            X, Y = np.meshgrid(X, Y)
+            Z = (t * 2) * np.sin(X / 100 * 4 * np.pi) 
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Greys', opacity=0.9, showscale=False))
+            title_text = "🔍 结构特征: 波纹吸能阵列图"
+            
     elif topology == "STRAP":
         W, t = dims['width'], dims['thickness']
-        L_display = 150 # 视觉长度
-        x = [0, L_display, L_display, 0, 0, L_display, L_display, 0]
-        y = [-W/2, -W/2, W/2, W/2, -W/2, -W/2, W/2, W/2]
-        z = [0, 0, 0, 0, t, t, t, t]
-        fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='darkgrey', opacity=0.9))
-        fig.update_layout(title="📐 3D 渲染: 柔性织带结构")
+        if view_type == "macro":
+            L_display = 300 
+            x = [0, L_display, L_display, 0, 0, L_display, L_display, 0]
+            y = [-W/2, -W/2, W/2, W/2, -W/2, -W/2, W/2, W/2]
+            z = [0, 0, 0, 0, 1, 1, 1, 1]
+            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='darkgrey', opacity=0.9))
+            title_text = "📐 宏观外观: 柔性织带轮廓"
+        else:
+            # 微观放大厚度
+            x = [0, 50, 50, 0, 0, 50, 50, 0]
+            y = [-W/2, -W/2, W/2, W/2, -W/2, -W/2, W/2, W/2]
+            z = [0, 0, 0, 0, t*5, t*5, t*5, t*5] # 夸张显示
+            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='grey', opacity=0.9))
+            title_text = "🔍 局部特征: 织带厚度与界面"
 
     fig.update_layout(
         scene=dict(
@@ -182,11 +213,12 @@ def render_3d_blueprint(topology, dims):
             yaxis=dict(showbackground=False, visible=False),
             zaxis=dict(showbackground=False, visible=False)
         ),
-        paper_bgcolor='white', plot_bgcolor='white', margin=dict(l=0, r=0, t=40, b=0), height=350
+        paper_bgcolor='white', plot_bgcolor='white', margin=dict(l=0, r=0, t=30, b=0), height=300,
+        title=dict(text=title_text, font=dict(color="black", size=15))
     )
     return fig
 
-# ================= 🌟 知识图谱字典 (全面细化) 🌟 =================
+# ================= 🌟 知识图谱字典 (6大领域细化) 🌟 =================
 DOMAIN_CONFIG = {
     "新能源汽车及电池包 (轻量化/阻燃)": {
         "parts": {
@@ -270,7 +302,14 @@ DOMAIN_CONFIG = {
 }
 
 st.title("🚀 材料特性在具体应用领域中的使用可行性评估系统")
-st.markdown("<style>.stTabs [data-baseweb='tab-list'] {gap: 6px;} .stTabs [data-baseweb='tab'] {background-color: #f0f2f6; font-weight: bold;} .stTabs [aria-selected='true'] {background-color: #000; color: white;}</style>", unsafe_allow_html=True)
+st.markdown("""
+<style>
+    .stTabs [data-baseweb='tab-list'] {gap: 6px;} 
+    .stTabs [data-baseweb='tab'] {background-color: #f0f2f6; font-weight: bold;} 
+    .stTabs [aria-selected='true'] {background-color: #000; color: white;}
+    hr {margin-top: 10px; margin-bottom: 20px;}
+</style>
+""", unsafe_allow_html=True)
 
 # ================= 侧边栏：复合材料与零件输入 =================
 with st.sidebar:
@@ -303,19 +342,17 @@ with st.sidebar:
             m_e = st.number_input("模量(基体)", value=3.0)
         with c2:
             st.markdown(f"**增强体参数**")
-            f_d = st.number_input("密度(增强体)", value=1.3)
-            f_s = st.number_input("强度(增强体)", value=9600.0)
-            f_e = st.number_input("模量(增强体)", value=100.0)
+            f_d = st.number_input("密度(增强)", value=1.3)
+            f_s = st.number_input("强度(增强)", value=9600.0)
+            f_e = st.number_input("模量(增强)", value=100.0)
             
-        # 根据混合定律计算复合本征
         final_density = m_d * (1-vf) + f_d * vf
         final_strength = m_s * (1-vf) + f_s * vf
         final_modulus = m_e * (1-vf) + f_e * vf
         
-        st.success(f"✅ **运算结果：**\n密度: {final_density:.2f} g/cm³ | 强度: {final_strength:.0f} MPa | 模量: {final_modulus:.1f} GPa")
+        st.success(f"✅ **运算结果：**\n密度: {final_density:.2f} | 强度: {final_strength:.0f} | 模量: {final_modulus:.1f}")
         search_cat = f"{fiber_category} reinforced {mat_category}"
     
-    # 状态清理侦测
     if target_part != st.session_state["last_part"]:
         st.session_state["llm_report"] = None
         st.session_state["last_part"] = target_part
@@ -331,39 +368,28 @@ if generate_btn:
     if not api_key: st.warning("未配置 DeepSeek API Key。"); st.stop()
     
     with st.spinner(f"正在读取独家文献数据库，对【{target_part}】进行全维深度评测..."):
-        # 联网检索
         web_query = f"scholarly articles {search_cat} application {target_part} {part_config['search_suffix']}"
         web_context = search_tavily(web_query, tavily_key)
         
-        # 本地 RAG 检索
         local_query = f"{search_cat} {target_part} 制造工艺 缺陷 规范"
         rag_context = retrieve_knowledge(local_query)
 
-        # ！！！！ 完整无删减版的 v19 Prompt ！！！！
         system_prompt = f"""
-        你是全球顶尖的材料科学家和应用工程师。正在评估当前材料体系在【{domain}】领域【{target_part}】上的商业可行性。
-        复合后/实际输入的材料本征参数: 密度={final_density:.2f} g/cm³, 强度={final_strength:.0f} MPa, 模量={final_modulus:.1f} GPa。
-        核心工艺及环境约束: {part_config['constraint']}
+        你是全球顶尖的材料科学家和应用工程师。评估材料体系在【{domain}】领域【{target_part}】上的商业可行性。
+        材料参数: 密度={final_density:.2f} g/cm³, 强度={final_strength:.0f} MPa, 模量={final_modulus:.1f} GPa。
+        核心约束: {part_config['constraint']}
+        情报: {web_context}
         
-        【外部情报】: {web_context}
-        【内部经验】: {rag_context}
+        【数据包装】禁止提“本地文件”或“Tavily”。包装为：“独家内部数据库” 或 “学术文献”。
         
-        【数据包装规范】:
-        绝对严禁在输出中提及“本地文件”、“txt”或“Tavily”。
-        本地数据一律包装为：“独家内部数据库：相关工艺规范”。
-        联网数据一律包装为：“学术文献/行业新闻：[文章标题]”。
-        
-        必须输出极其庞大、内容丰富的标准 JSON（严禁Markdown标记）：
+        必须输出极度庞大的标准 JSON（严禁Markdown标记，确保结构完整闭合）：
         {{
           "market_positioning": {{
             "tier": "颠覆级 / 标杆级 / 常规替代级",
             "verdict": "一句话定调产品的市场竞争力和核心卖点",
-            "competitor_compare": "非常详细地对比现役最顶尖竞品方案的优势和劣势"
+            "competitor_compare": "详细对比现役最顶尖竞品方案的优势和劣势"
           }},
-          "radar": {{
-            "绝对强度与极限容限": 100, "刚度稳定与几何匹配": 60, "轻量化综合收益": 95, 
-            "界面加工与成型良率": 45, "专属环境/生化抗性": 80, "商业化降本潜力": 90
-          }},
+          "radar": {{"强度容限": 100, "刚度稳定": 60, "轻量化收益": 95, "加工成型": 45, "专属环境抗性": 80, "商业潜力": 90}},
           "base_metrics": [
             {{"metric": "等效抗拉极限", "Base1": 570, "Base2": 3000, "NewMat": {final_strength}}},
             {{"metric": "等效模量支撑", "Base1": 71, "Base2": 160, "NewMat": {final_modulus}}},
@@ -373,70 +399,58 @@ if generate_btn:
           "summary_1": "本征参数对标总结",
           "math_sim": {{
             "design_goal": "核心部件等效替代目标",
-            "math_latex": "写出具体的力学或理化等效方程，推导过程",
+            "math_latex": "写出具体的等效方程",
             "table": [
-              {{"param": "核心代换指标", "base": "现役基准值", "new": "代换计算值"}},
-              {{"param": "次级参数演变", "base": "基准值", "new": "计算值"}}
+              {{"param": "核心代换指标", "base": "现役基准", "new": "计算值"}}
             ],
             "chart_vals": {{"base_wt": 4.25, "new_wt": 1.35}}
           }},
           "summary_2": "等效计算模块小结",
           "parameter_sweep": {{
-            "sweep_1": {{
-              "chart_title": "领域风险盲区波动图", 
-              "chart_data": [{{"x": "下限预估", "y": 20}}, {{"x": "中位理论值", "y": 120}}, {{"x": "上限风险", "y": 40}}], 
-              "scenarios": [{{"range": "风险区间", "desc": "预估后果"}}]
-            }},
-            "sweep_2": {{
-              "chart_title": "环境/生化极限衰减图", 
-              "chart_data": [{{"x": "常规环境", "y": 100}}, {{"x": "严苛挑战", "y": 40}}], 
-              "scenarios": [{{"range": "衰减说明", "desc": "应对策略"}}]
-            }}
+            "sweep_1": {{"chart_title": "风险波动图", "chart_data": [{{"x": "下限", "y": 20}}, {{"x": "中位", "y": 120}}, {{"x": "上限", "y": 40}}], "scenarios": [{{"range": "说明", "desc": "后果"}}]}},
+            "sweep_2": {{"chart_title": "极限衰减图", "chart_data": [{{"x": "常规", "y": 100}}, {{"x": "严苛", "y": 40}}], "scenarios": [{{"range": "说明", "desc": "策略"}}]}}
           }},
           "summary_3": "风险扫掠模块小结",
           "eight_dimensions": [
-            {{"dim": "1. 静态载荷补偿", "details": ["深度分析1", "分析2"], "chart_metric": "强度倍数", "base_val": 1.0, "new_val": 3.2}},
-            {{"dim": "2. 动态磨损与疲劳", "details": ["深度分析1", "分析2"], "chart_metric": "疲劳寿命", "base_val": 100, "new_val": 80}},
-            {{"dim": "3. 几何界面复合工艺", "details": ["深度分析1", "分析2"], "chart_metric": "工艺良率", "base_val": 95, "new_val": 60}},
-            {{"dim": "4. 【核心】领域专属抗性", "details": ["必须结合输入的领域约束深度剖析防弹/降解/耐候等", "论证2"], "chart_metric": "环境保持", "base_val": 90, "new_val": 45}},
-            {{"dim": "5. 材料微观混合影响", "details": ["深度分析1", "分析2"], "chart_metric": "结构优越", "base_val": 50, "new_val": 90}},
-            {{"dim": "6. 终端经济效益与降本", "details": ["深度BOM推演", "分析2"], "chart_metric": "降本(%)", "base_val": 0, "new_val": 15}},
-            {{"dim": "7. ESG与碳足迹", "details": ["深度分析1", "分析2"], "chart_metric": "ESG表现", "base_val": 20, "new_val": 85}},
-            {{"dim": "8. 行业准入资质与壁垒", "details": ["深度分析1", "分析2"], "chart_metric": "准入周期", "base_val": 10, "new_val": 18}}
+            {{"dim": "1. 静态载荷", "details": ["分析1"], "chart_metric": "倍数", "base_val": 1.0, "new_val": 3.2}},
+            {{"dim": "2. 动态疲劳", "details": ["分析1"], "chart_metric": "寿命", "base_val": 100, "new_val": 80}},
+            {{"dim": "3. 几何工艺", "details": ["分析1"], "chart_metric": "良率", "base_val": 95, "new_val": 60}},
+            {{"dim": "4. 专属抗性", "details": ["分析1"], "chart_metric": "保持率", "base_val": 90, "new_val": 45}},
+            {{"dim": "5. 微观混合", "details": ["分析1"], "chart_metric": "优越度", "base_val": 50, "new_val": 90}},
+            {{"dim": "6. 经济降本", "details": ["分析1"], "chart_metric": "降本(%)", "base_val": 0, "new_val": 15}},
+            {{"dim": "7. ESG表现", "details": ["分析1"], "chart_metric": "表现", "base_val": 20, "new_val": 85}},
+            {{"dim": "8. 行业壁垒", "details": ["分析1"], "chart_metric": "周期", "base_val": 10, "new_val": 18}}
           ],
           "summary_4": "八维切片深度小结",
           "grand_verdict": {{
-            "summary": "全生命周期投产陈词与红绿灯决议",
-            "strengths": ["绝对优势1", "优势2", "优势3"],
-            "weaknesses": ["致命短板1", "风险2", "风险3"]
+            "summary": "最终投产陈词与红绿灯决议",
+            "strengths": ["优势1", "优势2"],
+            "weaknesses": ["致命短板1", "风险2"]
           }},
-          "reference_sources": [
-            "独家内部数据库: xxx工艺标准规范", 
-            "学术文献: xxx研究团队发表的关于本材料的分析论文"
-          ]
+          "reference_sources": ["独家内部数据库: xxx", "学术文献: xxx"]
         }}
         """
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key.strip()}"}
         payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.15}
         
         try:
-            res = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload, timeout=120)
+            res = requests.post("[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)", headers=headers, json=payload, timeout=120)
             res.raise_for_status()
             raw_content = res.json()['choices'][0]['message']['content']
             
-            # 清除前后多余格式，确保完美解析 JSON
+            # 清除前后多余格式
             if "```json" in raw_content: 
                 raw_content = raw_content.split("```json")[1].split("```")[0]
             elif "```" in raw_content: 
                 raw_content = raw_content.split("```")[1].split("```")[0]
                 
             st.session_state["llm_report"] = json.loads(raw_content.strip())
-            st.success(f"✅ 【{target_part}】大语言模型深度论证及数据推演成功！")
+            st.success(f"✅ 【{target_part}】模型论证完成！")
         except Exception as e:
-            st.error(f"模型通讯中断或生成格式异常，请稍后重试: {str(e)}")
+            st.error(f"模型生成错误或被截断，请重试: {str(e)}")
 
 
-# ================= 🌟 视图渲染引擎 🌟 =================
+# ================= 🌟 视图渲染引擎：上下舒展布局 + 全系图表 🌟 =================
 if st.session_state["llm_report"]:
     data = st.session_state["llm_report"]
     
@@ -444,41 +458,39 @@ if st.session_state["llm_report"]:
     st.markdown(f"<h1 style='text-align: center; color: #000;'>🏆 市场定位评估：{data['market_positioning']['tier']}</h1>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align: center; color: #4a4a4a;'>{data['market_positioning']['verdict']}</h4><hr>", unsafe_allow_html=True)
     
-    # 让图纸有单独的版面
     st.markdown(f"### ⚙️ 【{target_part}】实时动态工程沙盒")
-    st.caption("👈 滑动修改下方尺寸参数，右侧【多维物理工况仪表盘】与【3D拓扑图纸】将以 60FPS 零延迟同步刷新")
+    st.caption("👈 滑动修改下方尺寸参数，图纸与物理指标将以 60FPS 零延迟同步刷新")
     
-    col_input, col_draw, col_dash = st.columns([1, 1, 1.2])
-    
+    # [改良排版1] 尺寸拉杆横向排列，不占垂直空间
     current_dims = {}
-    with col_input:
-        st.markdown("#### 1. 结构尺寸调节")
-        for item in part_config["ui_inputs"]:
-            # 沙盒输入交互，改变这里，不触发模型重跑
+    slider_cols = st.columns(len(part_config["ui_inputs"]))
+    for idx, item in enumerate(part_config["ui_inputs"]):
+        with slider_cols[idx]:
             current_dims[item["key"]] = st.slider(item["label"], item["min"], item["max"], item["default"], key=f"ds_{item['key']}")
-        
-        st.markdown("#### 2. 竞品博弈")
-        st.write(data['market_positioning']['competitor_compare'])
+    
+    # [改良排版2] 竞品博弈作为宽屏阅读区
+    st.markdown("#### ⚔️ 市场竞品对标剖析")
+    st.info(data['market_positioning']['competitor_compare'])
 
-    with col_draw:
-        st.markdown("#### 3. 3D 拓扑蓝图")
-        # 实时渲染 3D
-        st.plotly_chart(render_3d_blueprint(part_config["topology"], current_dims), use_container_width=True)
+    # [改良排版3] 核心重点：双 3D 引擎展示（左侧宏观，右侧微观）
+    col_draw_macro, col_draw_micro = st.columns(2)
+    with col_draw_macro:
+        st.plotly_chart(render_3d_blueprint(part_config["topology"], current_dims, "macro"), use_container_width=True)
+    with col_draw_micro:
+        st.plotly_chart(render_3d_blueprint(part_config["topology"], current_dims, "micro"), use_container_width=True)
 
-    with col_dash:
-        st.markdown("#### 4. 多维极限工况实时仪表盘")
-        # 实时物理推算
-        physics_df = calculate_physics(part_config["topology"], current_dims, final_strength, final_modulus, final_density)
-        
-        # 动态条形图呈现多维度数据
-        fig_dash = px.bar(
-            physics_df, x="数值", y="指标", orientation='h', text_auto='.3s', 
-            color="指标", color_discrete_sequence=px.colors.sequential.Greys_r
-        )
-        fig_dash.update_layout(showlegend=False, height=300, margin=dict(l=10, r=20, t=10, b=10))
-        st.plotly_chart(fig_dash, use_container_width=True)
+    # [改良排版4] 横向拉宽的多维极限工况仪表盘
+    st.markdown("#### ⚡ 终端多维极限工况推演仪表盘")
+    physics_df = calculate_physics(part_config["topology"], current_dims, final_strength, final_modulus, final_density)
+    
+    fig_dash = px.bar(
+        physics_df, x="数值", y="指标", orientation='h', text_auto='.4s', 
+        color="指标", color_discrete_sequence=px.colors.sequential.Greys_r
+    )
+    fig_dash.update_layout(showlegend=False, height=250, margin=dict(l=10, r=20, t=10, b=10))
+    st.plotly_chart(fig_dash, use_container_width=True)
 
-    st.markdown("---")
+    st.markdown("<hr style='border:2px solid black'>", unsafe_allow_html=True)
     
     # ---------------- 底层板块：v19 全系硬核分析报告保留 ----------------
     
@@ -496,7 +508,7 @@ if st.session_state["llm_report"]:
         r2c1, r2c2 = st.columns(2)
         cols_b = [r1c1, r1c2, r2c1, r2c2]
         for idx, md in enumerate(data['base_metrics']):
-            df_b = pd.DataFrame({"方案": ["现役基准A", "现役基准B", "本案材料"], "数值": [md['Base1'], md['Base2'], md['NewMat']]})
+            df_b = pd.DataFrame({"方案": ["现役A", "现役B", "本案材料"], "数值": [md['Base1'], md['Base2'], md['NewMat']]})
             fig_b = px.bar(df_b, x="方案", y="数值", text_auto='.2s', color="方案", color_discrete_sequence=["#d3d3d3", "#a9a9a9", "#000000"])
             fig_b.update_layout(title=md['metric'], showlegend=False, height=180, margin=dict(l=10, r=10, t=30, b=10))
             cols_b[idx].plotly_chart(fig_b, use_container_width=True)
