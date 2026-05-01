@@ -181,7 +181,7 @@ def render_3d_blueprint(topology, dims, view_type="macro"):
             h_macro = t * 3
             z = [0, 0, 0, 0, h_macro, h_macro, h_macro, h_macro]
             fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=0.8, flatshading=True))
-            title_text = "📐 宏观外观: 电池护板整体轮廓"
+            title_text = "📐 宏观外观: 波纹护板整体轮廓"
         else:
             # 微观是波纹
             X = np.linspace(0, min(L, 300), 50) # 取局部渲染波纹
@@ -219,17 +219,21 @@ def render_3d_blueprint(topology, dims, view_type="macro"):
     )
     return fig
 
-# ================= 🌟 知识图谱字典 (6大领域细化) 🌟 =================
+# ================= 🌟 知识图谱字典 (全面细化 8大领域 19个核心零部件) 🌟 =================
 DOMAIN_CONFIG = {
     "新能源汽车及电池包 (轻量化/阻燃)": {
         "parts": {
             "电池包防撞波纹底板": {
                 "topology": "CORRUGATED", "search_suffix": "EV battery corrugated plate crashworthiness thermal", "constraint": "必须基于汽车底部碰撞吸能、热失控阻燃进行评估。对标铝合金压铸件。",
-                "ui_inputs": [
-                    {"label": "护板长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1200.0},
-                    {"label": "护板宽度 (mm)", "key": "width", "min": 300.0, "max": 1000.0, "default": 800.0},
-                    {"label": "波纹材料厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}
-                ]
+                "ui_inputs": [{"label": "护板长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1200.0}, {"label": "护板宽度 (mm)", "key": "width", "min": 300.0, "max": 1000.0, "default": 800.0}, {"label": "波纹材料厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}]
+            },
+            "白车身轻量化纵梁": {
+                "topology": "BEAM", "search_suffix": "vehicle body-in-white longitudinal beam lightweight", "constraint": "聚焦整车减重与正面碰撞传力路径。对标超高强钢或铝挤压型材。",
+                "ui_inputs": [{"label": "纵梁外径/边长 (mm)", "key": "diameter", "min": 50.0, "max": 200.0, "default": 120.0}, {"label": "单段长度 (mm)", "key": "length", "min": 500.0, "max": 2500.0, "default": 1500.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 1.0, "max": 8.0, "default": 2.5}]
+            },
+            "电机碳纤维转子护套": {
+                "topology": "BEAM", "search_suffix": "EV motor carbon fiber rotor sleeve high speed", "constraint": "聚焦高转速下的离心力膨胀与涡流损耗。对标高强玻璃纤维或钛合金护套。",
+                "ui_inputs": [{"label": "转子外径 (mm)", "key": "diameter", "min": 50.0, "max": 300.0, "default": 150.0}, {"label": "转子长度 (mm)", "key": "length", "min": 100.0, "max": 500.0, "default": 200.0}, {"label": "护套壁厚 (mm)", "key": "thickness", "min": 0.5, "max": 5.0, "default": 1.5}]
             }
         }
     },
@@ -237,11 +241,15 @@ DOMAIN_CONFIG = {
         "parts": {
             "骨折内固定承力板": {
                 "topology": "PLATE", "search_suffix": "bone plate medical implant ISO 10993", "constraint": "绝对严禁提及军工。对标钛合金骨板，聚焦应力遮挡与降解相容性。",
-                "ui_inputs": [
-                    {"label": "骨板长度 (mm)", "key": "length", "min": 30.0, "max": 150.0, "default": 80.0},
-                    {"label": "骨板宽度 (mm)", "key": "width", "min": 5.0, "max": 20.0, "default": 12.0},
-                    {"label": "骨板厚度 (mm)", "key": "thickness", "min": 1.0, "max": 6.0, "default": 3.5}
-                ]
+                "ui_inputs": [{"label": "骨板长度 (mm)", "key": "length", "min": 30.0, "max": 150.0, "default": 80.0}, {"label": "骨板宽度 (mm)", "key": "width", "min": 5.0, "max": 20.0, "default": 12.0}, {"label": "骨板厚度 (mm)", "key": "thickness", "min": 1.0, "max": 6.0, "default": 3.5}]
+            },
+            "高强度人工韧带/肌腱": {
+                "topology": "STRAP", "search_suffix": "artificial ligament tendon tissue engineering", "constraint": "绝对严禁提及军工。对标PET纤维，聚焦抗疲劳拉伸和细胞黏附能力。",
+                "ui_inputs": [{"label": "韧带宽度 (mm)", "key": "width", "min": 5.0, "max": 20.0, "default": 10.0}, {"label": "韧带厚度 (mm)", "key": "thickness", "min": 0.5, "max": 4.0, "default": 2.0}]
+            },
+            "可吸收干涉骨钉": {
+                "topology": "BEAM", "search_suffix": "absorbable interference screw interference fixation", "constraint": "分析骨钉在植入时的扭转强度及术后的降解力学维持时间。对标 PLLA 或钛钉。",
+                "ui_inputs": [{"label": "骨钉外径 (mm)", "key": "diameter", "min": 3.0, "max": 12.0, "default": 7.0}, {"label": "骨钉长度 (mm)", "key": "length", "min": 10.0, "max": 60.0, "default": 25.0}, {"label": "螺纹等效壁厚 (mm)", "key": "thickness", "min": 1.0, "max": 5.0, "default": 2.0}]
             }
         }
     },
@@ -249,11 +257,11 @@ DOMAIN_CONFIG = {
         "parts": {
             "下肢大扭矩管状连杆": {
                 "topology": "BEAM", "search_suffix": "humanoid robot link dynamic stiffness", "constraint": "聚焦高频伺服电机启停带来的动态疲劳与抖动，对标7075航空铝。",
-                "ui_inputs": [
-                    {"label": "连杆外管径 (mm)", "key": "diameter", "min": 10.0, "max": 50.0, "default": 30.0},
-                    {"label": "两轴跨度长度 (mm)", "key": "length", "min": 100.0, "max": 600.0, "default": 350.0},
-                    {"label": "核心管壁厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}
-                ]
+                "ui_inputs": [{"label": "连杆外管径 (mm)", "key": "diameter", "min": 10.0, "max": 50.0, "default": 30.0}, {"label": "两轴跨度长度 (mm)", "key": "length", "min": 100.0, "max": 600.0, "default": 350.0}, {"label": "核心管壁厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}]
+            },
+            "主承力躯干框架": {
+                "topology": "PLATE", "search_suffix": "humanoid robot torso frame lightweight rigidity", "constraint": "聚焦机器人在行走跌倒时的抗冲击能力与整体刚度匹配。对标压铸铝合金。",
+                "ui_inputs": [{"label": "框架特征长度 (mm)", "key": "length", "min": 150.0, "max": 500.0, "default": 300.0}, {"label": "框架特征宽度 (mm)", "key": "width", "min": 100.0, "max": 400.0, "default": 200.0}, {"label": "背板等效壁厚 (mm)", "key": "thickness", "min": 2.0, "max": 15.0, "default": 5.0}]
             }
         }
     },
@@ -261,30 +269,27 @@ DOMAIN_CONFIG = {
         "parts": {
             "NIJ III级 防弹插板": {
                 "topology": "PLATE", "search_suffix": "ballistic armor plate MIL-STD impact", "constraint": "严禁医疗词汇。聚焦防弹极限与背部钝伤形变，对标芳纶复合板。",
-                "ui_inputs": [
-                    {"label": "插板长度 (mm)", "key": "length", "min": 200.0, "max": 400.0, "default": 300.0},
-                    {"label": "插板宽度 (mm)", "key": "width", "min": 150.0, "max": 300.0, "default": 250.0},
-                    {"label": "装甲厚度 (mm)", "key": "thickness", "min": 5.0, "max": 30.0, "default": 12.0}
-                ]
+                "ui_inputs": [{"label": "插板长度 (mm)", "key": "length", "min": 200.0, "max": 400.0, "default": 300.0}, {"label": "插板宽度 (mm)", "key": "width", "min": 150.0, "max": 300.0, "default": 250.0}, {"label": "装甲厚度 (mm)", "key": "thickness", "min": 5.0, "max": 30.0, "default": 12.0}]
+            },
+            "战术外骨骼承力件": {
+                "topology": "BEAM", "search_suffix": "tactical exoskeleton load bearing structural parts", "constraint": "聚焦全天候作战环境下的抗拉刚度与轻量化，对标钛合金或高强铝。",
+                "ui_inputs": [{"label": "支撑杆外径 (mm)", "key": "diameter", "min": 15.0, "max": 60.0, "default": 35.0}, {"label": "支撑杆长度 (mm)", "key": "length", "min": 200.0, "max": 800.0, "default": 450.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 1.5, "max": 8.0, "default": 3.5}]
+            },
+            "防爆头盔缓冲内衬": {
+                "topology": "CORRUGATED", "search_suffix": "combat helmet impact attenuation liner", "constraint": "聚焦低速钝器击打及爆炸冲击波的吸能缓冲。对标发泡聚丙烯 (EPP) 或 Kevlar。",
+                "ui_inputs": [{"label": "防护覆盖长度 (mm)", "key": "length", "min": 150.0, "max": 300.0, "default": 250.0}, {"label": "防护覆盖宽度 (mm)", "key": "width", "min": 150.0, "max": 300.0, "default": 200.0}, {"label": "波纹/蜂窝层厚度 (mm)", "key": "thickness", "min": 5.0, "max": 25.0, "default": 15.0}]
             }
         }
     },
-    "高性能纺织与户外极限": {
+    "航空航天与eVTOL飞行器": {
         "parts": {
-            "特种降落伞承力带": {
-                "topology": "STRAP", "search_suffix": "parachute strap UHMWPE high strength", "constraint": "必须分析开伞瞬间的撕裂和拉伸冲击，对标UHMWPE或锦纶66。",
-                "ui_inputs": [
-                    {"label": "织带受力宽度 (mm)", "key": "width", "min": 10.0, "max": 50.0, "default": 25.0},
-                    {"label": "织带压实厚度 (mm)", "key": "thickness", "min": 0.5, "max": 5.0, "default": 2.0}
-                ]
+            "机翼主承力翼梁": {
+                "topology": "BEAM", "search_suffix": "aerospace wing spar lightweight composite FAA", "constraint": "严禁民用标准。对标碳纤维预浸料，聚焦飞行气动载荷与轻量化。",
+                "ui_inputs": [{"label": "翼梁管径/弦高 (mm)", "key": "diameter", "min": 20.0, "max": 150.0, "default": 50.0}, {"label": "翼梁长度 (mm)", "key": "length", "min": 1000.0, "max": 5000.0, "default": 2000.0}, {"label": "梁壁厚 (mm)", "key": "thickness", "min": 2.0, "max": 15.0, "default": 5.0}]
             },
-            "极限高山帐篷支撑杆": {
-                "topology": "BEAM", "search_suffix": "tent pole high altitude wind resistance", "constraint": "对标高标号航空铝，重点分析狂风下的抗弯折力。",
-                "ui_inputs": [
-                    {"label": "支撑杆外径 (mm)", "key": "diameter", "min": 5.0, "max": 20.0, "default": 8.5},
-                    {"label": "单节跨度长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1000.0},
-                    {"label": "管壁厚度 (mm)", "key": "thickness", "min": 0.5, "max": 3.0, "default": 1.0}
-                ]
+            "客舱轻量化骨架/座椅骨架": {
+                "topology": "BEAM", "search_suffix": "aircraft cabin interior seat frame lightweight flame retardant", "constraint": "必须满足 FAA 适航阻燃认证及 16G 动态冲击测试。对标铝合金挤压件。",
+                "ui_inputs": [{"label": "管件外径 (mm)", "key": "diameter", "min": 15.0, "max": 60.0, "default": 30.0}, {"label": "管件长度 (mm)", "key": "length", "min": 300.0, "max": 1500.0, "default": 600.0}, {"label": "壁厚 (mm)", "key": "thickness", "min": 1.0, "max": 5.0, "default": 2.0}]
             }
         }
     },
@@ -292,11 +297,39 @@ DOMAIN_CONFIG = {
         "parts": {
             "高速协作臂主段": {
                 "topology": "BEAM", "search_suffix": "industrial robot arm lightweight stiffness fatigue", "constraint": "严禁偏向防弹或医疗！重点在于绝对高刚度（防末端下垂）和高周疲劳极限。",
-                "ui_inputs": [
-                    {"label": "主臂管外径 (mm)", "key": "diameter", "min": 30.0, "max": 150.0, "default": 80.0},
-                    {"label": "主臂长度 (mm)", "key": "length", "min": 200.0, "max": 1500.0, "default": 600.0},
-                    {"label": "主臂管壁厚度 (mm)", "key": "thickness", "min": 2.0, "max": 20.0, "default": 6.0}
-                ]
+                "ui_inputs": [{"label": "主臂管外径 (mm)", "key": "diameter", "min": 30.0, "max": 150.0, "default": 80.0}, {"label": "主臂长度 (mm)", "key": "length", "min": 200.0, "max": 1500.0, "default": 600.0}, {"label": "主臂管壁厚度 (mm)", "key": "thickness", "min": 2.0, "max": 20.0, "default": 6.0}]
+            },
+            "精密末端夹具平板": {
+                "topology": "PLATE", "search_suffix": "robot end effector gripper lightweight rigid plate", "constraint": "聚焦极低的惯量（降低电机负荷）和极高的尺寸稳定性。对标硬质铝合金。",
+                "ui_inputs": [{"label": "基板长度 (mm)", "key": "length", "min": 50.0, "max": 300.0, "default": 150.0}, {"label": "基板宽度 (mm)", "key": "width", "min": 30.0, "max": 200.0, "default": 80.0}, {"label": "基板厚度 (mm)", "key": "thickness", "min": 2.0, "max": 15.0, "default": 5.0}]
+            }
+        }
+    },
+    "高性能纺织与户外极限": {
+        "parts": {
+            "特种降落伞承力带": {
+                "topology": "STRAP", "search_suffix": "parachute strap UHMWPE high strength", "constraint": "必须分析开伞瞬间的撕裂和拉伸冲击，对标UHMWPE或锦纶66。",
+                "ui_inputs": [{"label": "织带受力宽度 (mm)", "key": "width", "min": 10.0, "max": 50.0, "default": 25.0}, {"label": "织带压实厚度 (mm)", "key": "thickness", "min": 0.5, "max": 5.0, "default": 2.0}]
+            },
+            "极限高山帐篷支撑杆": {
+                "topology": "BEAM", "search_suffix": "tent pole high altitude wind resistance", "constraint": "对标高标号航空铝，重点分析狂风下的抗弯折力。",
+                "ui_inputs": [{"label": "支撑杆外径 (mm)", "key": "diameter", "min": 5.0, "max": 20.0, "default": 8.5}, {"label": "单节跨度长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1000.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 0.5, "max": 3.0, "default": 1.0}]
+            },
+            "攀岩/速降高耐磨静力绳": {
+                "topology": "BEAM", "search_suffix": "climbing static rope high tenacity abrasion resistance", "constraint": "聚焦纯拉伸负荷、锋利岩角处的耐磨性及吸水率。对标高强锦纶或芳纶芯材。",
+                "ui_inputs": [{"label": "绳索外径 (mm)", "key": "diameter", "min": 8.0, "max": 14.0, "default": 10.5}, {"label": "悬垂长度 (mm)", "key": "length", "min": 1000.0, "max": 10000.0, "default": 5000.0}, {"label": "承力内芯等效厚 (mm)", "key": "thickness", "min": 2.0, "max": 7.0, "default": 5.25}] 
+            }
+        }
+    },
+    "智能穿戴与柔性外骨骼": {
+        "parts": {
+            "柔性外骨骼助力带": {
+                "topology": "STRAP", "search_suffix": "wearable flexible exoskeleton tendon strap", "constraint": "不能用刚性骨架思维！必须分析人体工效学舒适度、千万次弯曲疲劳及汗液耐受。对标高弹尼龙混合带。",
+                "ui_inputs": [{"label": "带体宽度 (mm)", "key": "width", "min": 15.0, "max": 80.0, "default": 40.0}, {"label": "带体厚度 (mm)", "key": "thickness", "min": 1.0, "max": 6.0, "default": 2.5}]
+            },
+            "智能穿戴承力外壳": {
+                "topology": "PLATE", "search_suffix": "smart wearable rigid enclosure lightweight durable", "constraint": "聚焦抗跌落冲击、高精细加工尺寸稳定性及亲肤防敏。对标钛合金或高强聚碳酸酯。",
+                "ui_inputs": [{"label": "外壳特征长度 (mm)", "key": "length", "min": 20.0, "max": 100.0, "default": 45.0}, {"label": "外壳特征宽度 (mm)", "key": "width", "min": 15.0, "max": 80.0, "default": 35.0}, {"label": "设计壁厚 (mm)", "key": "thickness", "min": 0.5, "max": 3.0, "default": 1.2}]
             }
         }
     }
@@ -435,7 +468,6 @@ if generate_btn:
         payload = {"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}], "temperature": 0.15}
         
         try:
-            # 【修复点】：去掉了多余的 markdown 链接格式
             res = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload, timeout=120)
             res.raise_for_status()
             raw_content = res.json()['choices'][0]['message']['content']
