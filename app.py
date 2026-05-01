@@ -62,7 +62,7 @@ def calculate_physics(topology, dims, S, E_gpa, density):
     results = []
     weight_factor = density * 1e-6 # 换算为 kg
     
-    if topology == "BEAM":
+    if topology == "BEAM": # 圆形管材/连杆
         L, D, t = dims['length'], dims['diameter'], dims['thickness']
         d_inner = max(0.1, D - 2*t)
         V = math.pi/4 * (D**2 - d_inner**2) * L
@@ -71,14 +71,34 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         
         weight = V * weight_factor
         bending_load = (S * I / (D/2)) / L if L>0 else 0
-        compression = S * area * 0.8 # 屈曲折减系数
+        compression = S * area * 0.8 
         deflection = (bending_load * L**3) / (3 * E * I) if I>0 else 0
         
         results = [
             {"指标": "结构总重量估算 (kg)", "数值": weight},
-            {"指标": "理论抗弯极限极值 (N)", "数值": bending_load},
+            {"指标": "悬臂抗弯极限极值 (N)", "数值": bending_load},
             {"指标": "轴向抗压承载极限 (N)", "数值": compression},
             {"指标": "极限弹性挠度极值 (mm)", "数值": deflection}
+        ]
+        
+    elif topology == "I_BEAM": # 工字梁 (航空机翼/汽车纵梁)
+        L, H, W, t = dims['length'], dims['height'], dims['width'], dims['thickness']
+        area = 2 * W * t + max(0, H - 2*t) * t
+        V = area * L
+        weight = V * weight_factor
+        
+        # 工字梁惯性矩 Ix = (W*H^3 - (W-t)*h^3)/12
+        h_inner = max(0, H - 2*t)
+        I = (W * H**3 - (W - t) * h_inner**3) / 12
+        
+        bending_load = (S * I / (H/2)) / L if L>0 else 0
+        deflection = (bending_load * L**3) / (3 * E * I) if I>0 else 0
+        
+        results = [
+            {"指标": "结构总重量估算 (kg)", "数值": weight},
+            {"指标": "工字梁主轴抗弯极限 (N)", "数值": bending_load},
+            {"指标": "腹板抗剪切预估 (N)", "数值": S * 0.5 * h_inner * t},
+            {"指标": "主轴抗弯挠度极值 (mm)", "数值": deflection}
         ]
         
     elif topology == "PLATE":
@@ -87,7 +107,7 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         weight = V * weight_factor
         
         punch_load = 4 * S * (t**2) / L if L>0 else 0
-        shear_load = S * 0.577 * W * t # 冯米塞斯屈服准则
+        shear_load = S * 0.577 * W * t 
         I = (W * t**3) / 12
         deflection = (punch_load * L**3) / (48 * E * I) if I>0 else 0
         
@@ -100,12 +120,12 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         
     elif topology == "CORRUGATED":
         L, W, t = dims['length'], dims['width'], dims['thickness']
-        V = L * W * t * 1.22 # 波纹展开面积系数
+        V = L * W * t * 1.22 
         weight = V * weight_factor
         
-        I_equivalent = (W * (t*3)**3) / 12 # 等效惯性矩放大
+        I_equivalent = (W * (t*3)**3) / 12 
         bending_load = (S * I_equivalent / (t*1.5)) / L if L>0 else 0
-        crush_energy = S * V * 0.4 # 吸能系数
+        crush_energy = S * V * 0.4 
         
         results = [
             {"指标": "结构总重量估算 (kg)", "数值": weight},
@@ -116,7 +136,7 @@ def calculate_physics(topology, dims, S, E_gpa, density):
         
     elif topology == "STRAP":
         W, t = dims['width'], dims['thickness']
-        L_ref = 1000 # 以1米作为参考标准
+        L_ref = 1000 
         V = L_ref * W * t
         area = W * t
         weight = V * weight_factor
@@ -133,106 +153,147 @@ def calculate_physics(topology, dims, S, E_gpa, density):
 
     return pd.DataFrame(results)
 
-# ================= 🌟 核心引擎 2：真实的“双视图”3D绘图引擎 🌟 =================
+# ================= 🌟 核心引擎 2：真·双视图 CAE仿真绘图引擎 🌟 =================
 def render_3d_blueprint(topology, dims, view_type="macro"):
-    """根据拓扑动态绘制黑白线框图，宏观和微观视图产生极强反差，具备真实指导意义"""
+    """
+    macro: 渲染宏观真实几何结构 (灰白色调)
+    micro: 渲染受力/形变云图 (带热力图颜色梯度，反映性能分布)
+    """
     fig = go.Figure()
     
-    if topology == "BEAM":
+    if topology == "BEAM": # 管材
         L, D = dims['length'], dims['diameter']
+        theta, z = np.meshgrid(np.linspace(0, 2*np.pi, 30), np.linspace(0, L, 20))
         if view_type == "macro":
-            theta, z = np.meshgrid(np.linspace(0, 2*np.pi, 20), np.linspace(0, L, 10))
-            fig.add_trace(go.Surface(x=(D/2)*np.cos(theta), y=(D/2)*np.sin(theta), z=z, colorscale='Greys', opacity=0.9, showscale=False))
-            title_text = "📐 宏观外观: 连杆整体包络"
-        else: 
-            # 剖视图：切开一半展示管内径与壁厚
-            t = dims['thickness']
-            d_inner = max(0.1, D - 2*t)
-            theta, z = np.meshgrid(np.linspace(0, np.pi, 30), np.linspace(0, min(L, 100), 10)) # 只画半圆剖面
-            fig.add_trace(go.Surface(x=(D/2)*np.cos(theta), y=(D/2)*np.sin(theta), z=z, colorscale='Greys', opacity=0.8, showscale=False, name="外壁"))
-            fig.add_trace(go.Surface(x=(d_inner/2)*np.cos(theta), y=(d_inner/2)*np.sin(theta), z=z, colorscale='Blues', opacity=0.9, showscale=False, name="内壁"))
-            title_text = "🔍 截面剖视图: 管壁厚度特征"
+            x = (D/2)*np.cos(theta)
+            y = (D/2)*np.sin(theta)
+            fig.add_trace(go.Surface(x=x, y=y, z=z, colorscale='Greys', opacity=0.9, showscale=False))
+            title_text = "📐 宏观外观: 管材/连杆结构"
+        else:
+            # 仿真：受端部弯曲载荷，根部应力最大 (云图)
+            deflection = 0.1 * D * (z/L)**2 # 模拟抛物线弯曲
+            x = (D/2)*np.cos(theta) + deflection
+            y = (D/2)*np.sin(theta)
+            stress_color = (L - z) # 根部z=0应力最大
+            fig.add_trace(go.Surface(x=x, y=y, z=z, surfacecolor=stress_color, colorscale='Inferno', opacity=0.9, showscale=False))
+            title_text = "🔥 CAE仿真: 悬臂受弯应力/形变云图"
             
+    elif topology == "I_BEAM": # 工字梁
+        L, H, W, t = dims['length'], dims['height'], dims['width'], dims['thickness']
+        # 简化工字梁的三个面：上翼缘，下翼缘，腹板
+        Z_arr = np.linspace(0, L, 20)
+        if view_type == "macro":
+            # 上下翼缘
+            fig.add_trace(go.Surface(x=np.array([[-W/2, W/2]]*20), y=np.full((20,2), H/2), z=np.array([Z_arr, Z_arr]).T, colorscale='Greys', showscale=False))
+            fig.add_trace(go.Surface(x=np.array([[-W/2, W/2]]*20), y=np.full((20,2), -H/2), z=np.array([Z_arr, Z_arr]).T, colorscale='Greys', showscale=False))
+            # 腹板
+            fig.add_trace(go.Surface(x=np.zeros((20,2)), y=np.array([[-H/2, H/2]]*20), z=np.array([Z_arr, Z_arr]).T, colorscale='Greys', showscale=False))
+            title_text = "📐 宏观外观: 工字梁截面轮廓"
+        else:
+            # 仿真：受弯曲，产生挠度，翼缘应力大
+            deflection = 0.05 * L * (Z_arr/L)**2
+            stress_top = np.full((20,2), 1.0) * (1 - Z_arr/L)[:, None] # 根部上翼缘受拉最高
+            stress_bot = np.full((20,2), 0.8) * (1 - Z_arr/L)[:, None] # 根部下翼缘受压
+            stress_web = np.abs(np.array([[-H/2, H/2]]*20)) / (H/2) * (1 - Z_arr/L)[:, None] # 腹板应力向两端扩散
+            
+            fig.add_trace(go.Surface(x=np.array([[-W/2, W/2]]*20)+deflection[:,None], y=np.full((20,2), H/2), z=np.array([Z_arr, Z_arr]).T, surfacecolor=stress_top, colorscale='Jet', showscale=False))
+            fig.add_trace(go.Surface(x=np.array([[-W/2, W/2]]*20)+deflection[:,None], y=np.full((20,2), -H/2), z=np.array([Z_arr, Z_arr]).T, surfacecolor=stress_bot, colorscale='Jet', showscale=False))
+            fig.add_trace(go.Surface(x=np.zeros((20,2))+deflection[:,None], y=np.array([[-H/2, H/2]]*20), z=np.array([Z_arr, Z_arr]).T, surfacecolor=stress_web, colorscale='Jet', showscale=False))
+            title_text = "🔥 CAE仿真: 翼梁主轴弯曲应力云图"
+
     elif topology == "PLATE":
         L, W, t = dims['length'], dims['width'], dims['thickness']
+        X, Y = np.meshgrid(np.linspace(0, L, 20), np.linspace(0, W, 20))
         if view_type == "macro":
-            x = [0, L, L, 0, 0, L, L, 0]
-            y = [0, 0, W, W, 0, 0, W, W]
-            z = [0, 0, 0, 0, t, t, t, t] 
-            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=0.9, flatshading=True))
-            title_text = "📐 宏观外观: 平板装配轮廓"
+            Z = np.zeros_like(X)
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Greys', opacity=0.9, showscale=False))
+            title_text = "📐 宏观外观: 平面装配外廓"
         else: 
-            # 形变云图仿真：模拟中心受载弯曲
-            X, Y = np.meshgrid(np.linspace(0, L, 20), np.linspace(0, W, 20))
-            Z = -0.05 * L * (1 - ((X-L/2)/(L/2))**2) * (1 - ((Y-W/2)/(W/2))**2) # 抛物面弯曲
-            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Inferno', opacity=0.9, showscale=False))
-            title_text = "🔍 仿真模拟: 中心受载形变云图"
+            # 仿真：中心受冲压，形成抛物面下陷，中心颜色最亮
+            Z = -0.1 * L * np.sin(X/L * np.pi) * np.sin(Y/W * np.pi)
+            stress_color = np.abs(Z) # 形变越大的地方应力越集中
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, surfacecolor=stress_color, colorscale='Inferno', opacity=0.9, showscale=False))
+            title_text = "🔥 CAE仿真: 中心抗冲压形变/应力云图"
             
     elif topology == "CORRUGATED":
         L, W, t = dims['length'], dims['width'], dims['thickness']
+        X, Y = np.meshgrid(np.linspace(0, L, 40), np.linspace(0, W, 20))
         if view_type == "macro":
-            # 宏观是一个透明装配盒，代表波纹板占用的空间
+            # 宏观是一个代表包络体积的透明灰盒
             h_macro = t * 3
-            x = [0, L, L, 0, 0, L, L, 0]
-            y = [0, 0, W, W, 0, 0, W, W]
-            z = [0, 0, 0, 0, h_macro, h_macro, h_macro, h_macro]
-            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=0.3, flatshading=True))
-            title_text = "📐 宏观包络: 波纹护板装配空间"
+            x_box = [0, L, L, 0, 0, L, L, 0]
+            y_box = [0, 0, W, W, 0, 0, W, W]
+            z_box = [-h_macro, -h_macro, -h_macro, -h_macro, h_macro, h_macro, h_macro, h_macro]
+            fig.add_trace(go.Mesh3d(x=x_box, y=y_box, z=z_box, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='lightgrey', opacity=0.4, flatshading=True))
+            title_text = "📐 宏观包络: 电池底板设计空间"
         else:
-            # 微观是精细的波纹阵列
-            X, Y = np.meshgrid(np.linspace(0, min(L, 300), 50), np.linspace(0, min(W, 300), 20))
-            Z = (t * 2) * np.sin(X / 100 * 4 * np.pi) 
-            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Greys', opacity=0.9, showscale=False))
-            title_text = "🔍 结构细节: 波纹缓冲吸能阵列"
+            # 仿真：波纹阵列在受压时的吸能应力分布，波峰波谷受力大
+            Z = (t * 2) * np.sin(X / L * 10 * np.pi) 
+            stress_color = np.abs(Z) # 波峰波谷应力高
+            fig.add_trace(go.Surface(x=X, y=Y, z=Z, surfacecolor=stress_color, colorscale='Jet', opacity=0.9, showscale=False))
+            title_text = "🔥 CAE仿真: 波纹吸能抗压应力云图"
             
     elif topology == "STRAP":
-        W, t = dims['width'], dims['thickness']
+        W, t = dims['length'] if 'length' in dims else 300, dims['width']
+        X, Y = np.meshgrid(np.linspace(0, W, 20), np.linspace(-dims['width']/2, dims['width']/2, 10))
         if view_type == "macro":
-            L_display = 300 
-            x = [0, L_display, L_display, 0, 0, L_display, L_display, 0]
-            y = [-W/2, -W/2, W/2, W/2, -W/2, -W/2, W/2, W/2]
-            z = [0, 0, 0, 0, t, t, t, t]
-            fig.add_trace(go.Mesh3d(x=x, y=y, z=z, i=[0,0,0,1,1,2,4,4,4,5,5,6], j=[1,2,3,2,5,6,5,6,7,6,7,2], k=[2,3,0,5,6,1,6,7,4,7,2,7], color='darkgrey', opacity=0.9))
-            title_text = "📐 宏观外观: 柔性织带轮廓"
-        else:
-            # 微观纤维编织纹理
-            X, Y = np.meshgrid(np.linspace(0, 50, 50), np.linspace(-W/2, W/2, 20))
-            Z = np.sin(X)*np.cos(Y) * (t/2)
+            Z = np.zeros_like(X)
             fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Greys', opacity=0.9, showscale=False))
-            title_text = "🔍 局部放大: 纤维编织微观机理"
+            title_text = "📐 宏观外观: 柔性织带自然状态"
+        else:
+            # 仿真：两端受拉导致中间产生“颈缩 (Necking)”效应
+            necking_factor = 1 - 0.15 * np.sin(X/W * np.pi)
+            Y_neck = Y * necking_factor
+            Z = np.zeros_like(X)
+            stress_color = 1 / necking_factor # 越细的地方拉应力越集中
+            fig.add_trace(go.Surface(x=X, y=Y_neck, z=Z, surfacecolor=stress_color, colorscale='Inferno', opacity=0.9, showscale=False))
+            title_text = "🔥 CAE仿真: 极限拉伸颈缩/拉应力云图"
 
     fig.update_layout(
         scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False)),
-        paper_bgcolor='white', plot_bgcolor='white', margin=dict(l=0, r=0, t=30, b=0), height=350,
-        title=dict(text=title_text, font=dict(color="black", size=15))
+        paper_bgcolor='white', plot_bgcolor='white', margin=dict(l=0, r=0, t=30, b=0), height=320,
+        title=dict(text=title_text, font=dict(color="black", size=14))
     )
     return fig
 
-# ================= 🌟 知识图谱字典 (全面细化 8大领域 19个核心零部件) 🌟 =================
+# ================= 🌟 知识图谱字典 (8大领域 19个核心零部件 严谨物理映射) 🌟 =================
 DOMAIN_CONFIG = {
-    "新能源汽车及电池包 (轻量化/阻燃)": {
+    "航空航天与eVTOL飞行器": {
         "parts": {
-            "电池包防撞波纹底板": {
-                "topology": "CORRUGATED", "search_suffix": "EV battery corrugated plate crashworthiness thermal", "constraint": "必须基于汽车底部碰撞吸能、热失控阻燃进行评估。对标铝合金压铸件。",
-                "ui_inputs": [{"label": "护板长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1200.0}, {"label": "护板宽度 (mm)", "key": "width", "min": 300.0, "max": 1000.0, "default": 800.0}, {"label": "波纹厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}]
+            "机翼主承力翼梁": {
+                "topology": "I_BEAM", "search_suffix": "aerospace wing spar I-beam composite FAA", "constraint": "严禁民用标准。对标碳纤维预浸料，聚焦气动弯矩与扭矩。",
+                "ui_inputs": [
+                    {"label": "翼梁高度 (mm)", "key": "height", "min": 50.0, "max": 300.0, "default": 150.0}, 
+                    {"label": "翼缘宽度 (mm)", "key": "width", "min": 20.0, "max": 150.0, "default": 80.0}, 
+                    {"label": "翼梁长度 (mm)", "key": "length", "min": 1000.0, "max": 5000.0, "default": 2500.0},
+                    {"label": "平均壁厚 (mm)", "key": "thickness", "min": 2.0, "max": 15.0, "default": 5.0}
+                ]
             },
-            "白车身轻量化纵梁": {
-                "topology": "BEAM", "search_suffix": "vehicle body-in-white longitudinal beam lightweight", "constraint": "聚焦整车减重与正面碰撞传力路径。对标超高强钢或铝挤压型材。",
-                "ui_inputs": [{"label": "纵梁边长 (mm)", "key": "diameter", "min": 50.0, "max": 200.0, "default": 120.0}, {"label": "单段长度 (mm)", "key": "length", "min": 500.0, "max": 2500.0, "default": 1500.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 1.0, "max": 8.0, "default": 2.5}]
-            },
-            "电机碳纤维转子护套": {
-                "topology": "BEAM", "search_suffix": "EV motor carbon fiber rotor sleeve high speed", "constraint": "聚焦高转速下的离心力膨胀与涡流损耗。对标高强玻璃纤维或钛合金护套。",
-                "ui_inputs": [{"label": "转子外径 (mm)", "key": "diameter", "min": 50.0, "max": 300.0, "default": 150.0}, {"label": "转子长度 (mm)", "key": "length", "min": 100.0, "max": 500.0, "default": 200.0}, {"label": "护套厚度 (mm)", "key": "thickness", "min": 0.5, "max": 5.0, "default": 1.5}]
+            "客舱轻量化座椅骨架": {
+                "topology": "BEAM", "search_suffix": "aircraft cabin interior seat frame lightweight flame retardant", "constraint": "必须满足 FAA 适航阻燃认证及 16G 动态冲击测试。对标铝合金挤压件。",
+                "ui_inputs": [{"label": "管件外径 (mm)", "key": "diameter", "min": 15.0, "max": 60.0, "default": 30.0}, {"label": "管件长度 (mm)", "key": "length", "min": 300.0, "max": 1500.0, "default": 600.0}, {"label": "管壁厚 (mm)", "key": "thickness", "min": 1.0, "max": 5.0, "default": 2.0}]
             }
         }
     },
-    "生物医疗植入物 (生化导向)": {
+    "新能源汽车及电池包": {
+        "parts": {
+            "白车身轻量化纵梁": {
+                "topology": "I_BEAM", "search_suffix": "vehicle body-in-white longitudinal beam lightweight", "constraint": "聚焦整车减重与正面碰撞传力路径。对标超高强钢或铝挤压型材。",
+                "ui_inputs": [{"label": "纵梁高度 (mm)", "key": "height", "min": 80.0, "max": 250.0, "default": 120.0}, {"label": "纵梁宽度 (mm)", "key": "width", "min": 50.0, "max": 150.0, "default": 80.0}, {"label": "单段长度 (mm)", "key": "length", "min": 500.0, "max": 2500.0, "default": 1500.0}, {"label": "钣金壁厚 (mm)", "key": "thickness", "min": 1.0, "max": 8.0, "default": 2.5}]
+            },
+            "电池包防撞波纹底板": {
+                "topology": "CORRUGATED", "search_suffix": "EV battery corrugated plate crashworthiness thermal", "constraint": "必须基于底部托底吸能、热失控阻燃进行评估。对标铝合金压铸件。",
+                "ui_inputs": [{"label": "护板长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1200.0}, {"label": "护板宽度 (mm)", "key": "width", "min": 300.0, "max": 1000.0, "default": 800.0}, {"label": "波纹厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}]
+            }
+        }
+    },
+    "生物医疗植入物": {
         "parts": {
             "骨折内固定承力板": {
                 "topology": "PLATE", "search_suffix": "bone plate medical implant ISO 10993", "constraint": "绝对严禁提及军工。对标钛合金骨板，聚焦应力遮挡与降解相容性。",
                 "ui_inputs": [{"label": "骨板长度 (mm)", "key": "length", "min": 30.0, "max": 150.0, "default": 80.0}, {"label": "骨板宽度 (mm)", "key": "width", "min": 5.0, "max": 20.0, "default": 12.0}, {"label": "骨板厚度 (mm)", "key": "thickness", "min": 1.0, "max": 6.0, "default": 3.5}]
             },
-            "高强度人工韧带/肌腱": {
+            "人工韧带/肌腱": {
                 "topology": "STRAP", "search_suffix": "artificial ligament tendon tissue engineering", "constraint": "绝对严禁提及军工。对标PET纤维，聚焦抗疲劳拉伸和细胞黏附能力。",
                 "ui_inputs": [{"label": "韧带宽度 (mm)", "key": "width", "min": 5.0, "max": 20.0, "default": 10.0}, {"label": "韧带厚度 (mm)", "key": "thickness", "min": 0.5, "max": 4.0, "default": 2.0}]
             },
@@ -242,11 +303,11 @@ DOMAIN_CONFIG = {
             }
         }
     },
-    "人形机器人核心骨架 (高动载)": {
+    "人形机器人核心骨架": {
         "parts": {
             "下肢大扭矩管状连杆": {
                 "topology": "BEAM", "search_suffix": "humanoid robot link dynamic stiffness", "constraint": "聚焦高频伺服电机启停带来的动态疲劳与抖动，对标7075航空铝。",
-                "ui_inputs": [{"label": "连杆外管径 (mm)", "key": "diameter", "min": 10.0, "max": 50.0, "default": 30.0}, {"label": "连杆长度 (mm)", "key": "length", "min": 100.0, "max": 600.0, "default": 350.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}]
+                "ui_inputs": [{"label": "连杆外管径 (mm)", "key": "diameter", "min": 10.0, "max": 50.0, "default": 30.0}, {"label": "两轴跨度长度 (mm)", "key": "length", "min": 100.0, "max": 600.0, "default": 350.0}, {"label": "核心管壁厚度 (mm)", "key": "thickness", "min": 1.0, "max": 10.0, "default": 3.0}]
             },
             "主承力躯干框架": {
                 "topology": "PLATE", "search_suffix": "humanoid robot torso frame lightweight rigidity", "constraint": "聚焦机器人在行走跌倒时的抗冲击能力与整体刚度匹配。对标压铸铝合金。",
@@ -260,25 +321,9 @@ DOMAIN_CONFIG = {
                 "topology": "PLATE", "search_suffix": "ballistic armor plate MIL-STD impact", "constraint": "严禁医疗词汇。聚焦防弹极限与背部钝伤形变，对标芳纶复合板。",
                 "ui_inputs": [{"label": "插板长度 (mm)", "key": "length", "min": 200.0, "max": 400.0, "default": 300.0}, {"label": "插板宽度 (mm)", "key": "width", "min": 150.0, "max": 300.0, "default": 250.0}, {"label": "装甲厚度 (mm)", "key": "thickness", "min": 5.0, "max": 30.0, "default": 12.0}]
             },
-            "战术外骨骼承力件": {
-                "topology": "BEAM", "search_suffix": "tactical exoskeleton load bearing structural parts", "constraint": "聚焦全天候作战环境下的抗拉刚度与轻量化，对标钛合金或高强铝。",
-                "ui_inputs": [{"label": "支撑杆外径 (mm)", "key": "diameter", "min": 15.0, "max": 60.0, "default": 35.0}, {"label": "支撑杆长度 (mm)", "key": "length", "min": 200.0, "max": 800.0, "default": 450.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 1.5, "max": 8.0, "default": 3.5}]
-            },
             "防爆头盔缓冲内衬": {
                 "topology": "CORRUGATED", "search_suffix": "combat helmet impact attenuation liner", "constraint": "聚焦低速钝器击打及爆炸冲击波的吸能缓冲。对标发泡聚丙烯 (EPP) 或 Kevlar。",
                 "ui_inputs": [{"label": "覆盖长度 (mm)", "key": "length", "min": 150.0, "max": 300.0, "default": 250.0}, {"label": "覆盖宽度 (mm)", "key": "width", "min": 150.0, "max": 300.0, "default": 200.0}, {"label": "波纹厚度 (mm)", "key": "thickness", "min": 5.0, "max": 25.0, "default": 15.0}]
-            }
-        }
-    },
-    "航空航天与eVTOL飞行器": {
-        "parts": {
-            "机翼主承力翼梁": {
-                "topology": "BEAM", "search_suffix": "aerospace wing spar lightweight composite FAA", "constraint": "严禁民用标准。对标碳纤维预浸料，聚焦飞行气动载荷与轻量化。",
-                "ui_inputs": [{"label": "翼梁管径 (mm)", "key": "diameter", "min": 20.0, "max": 150.0, "default": 50.0}, {"label": "翼梁长度 (mm)", "key": "length", "min": 1000.0, "max": 5000.0, "default": 2000.0}, {"label": "梁壁厚 (mm)", "key": "thickness", "min": 2.0, "max": 15.0, "default": 5.0}]
-            },
-            "客舱轻量化骨架/座椅骨架": {
-                "topology": "BEAM", "search_suffix": "aircraft cabin interior seat frame lightweight flame retardant", "constraint": "必须满足 FAA 适航阻燃认证及 16G 动态冲击测试。对标铝合金挤压件。",
-                "ui_inputs": [{"label": "管件外径 (mm)", "key": "diameter", "min": 15.0, "max": 60.0, "default": 30.0}, {"label": "管件长度 (mm)", "key": "length", "min": 300.0, "max": 1500.0, "default": 600.0}, {"label": "管壁厚 (mm)", "key": "thickness", "min": 1.0, "max": 5.0, "default": 2.0}]
             }
         }
     },
@@ -298,26 +343,22 @@ DOMAIN_CONFIG = {
         "parts": {
             "特种降落伞承力带": {
                 "topology": "STRAP", "search_suffix": "parachute strap UHMWPE high strength", "constraint": "必须分析开伞瞬间的撕裂和拉伸冲击，对标UHMWPE或锦纶66。",
-                "ui_inputs": [{"label": "织带宽度 (mm)", "key": "width", "min": 10.0, "max": 50.0, "default": 25.0}, {"label": "织带厚度 (mm)", "key": "thickness", "min": 0.5, "max": 5.0, "default": 2.0}]
+                "ui_inputs": [{"label": "织带受力宽度 (mm)", "key": "width", "min": 10.0, "max": 50.0, "default": 25.0}, {"label": "织带压实厚度 (mm)", "key": "thickness", "min": 0.5, "max": 5.0, "default": 2.0}]
             },
             "极限高山帐篷支撑杆": {
                 "topology": "BEAM", "search_suffix": "tent pole high altitude wind resistance", "constraint": "对标高标号航空铝，重点分析狂风下的抗弯折力。",
                 "ui_inputs": [{"label": "外径 (mm)", "key": "diameter", "min": 5.0, "max": 20.0, "default": 8.5}, {"label": "跨度长度 (mm)", "key": "length", "min": 500.0, "max": 2000.0, "default": 1000.0}, {"label": "管壁厚度 (mm)", "key": "thickness", "min": 0.5, "max": 3.0, "default": 1.0}]
-            },
-            "攀岩/速降高耐磨静力绳": {
-                "topology": "BEAM", "search_suffix": "climbing static rope high tenacity abrasion resistance", "constraint": "聚焦纯拉伸负荷、锋利岩角处的耐磨性及吸水率。对标高强锦纶或芳纶芯材。",
-                "ui_inputs": [{"label": "绳索外径 (mm)", "key": "diameter", "min": 8.0, "max": 14.0, "default": 10.5}, {"label": "悬垂长度 (mm)", "key": "length", "min": 1000.0, "max": 10000.0, "default": 5000.0}, {"label": "内芯厚度 (mm)", "key": "thickness", "min": 2.0, "max": 7.0, "default": 5.25}] 
             }
         }
     },
     "智能穿戴与柔性外骨骼": {
         "parts": {
             "柔性外骨骼助力带": {
-                "topology": "STRAP", "search_suffix": "wearable flexible exoskeleton tendon strap", "constraint": "不能用刚性骨架思维！必须分析人体工效学舒适度、千万次弯曲疲劳及汗液耐受。对标高弹尼龙混合带。",
+                "topology": "STRAP", "search_suffix": "wearable flexible exoskeleton tendon strap", "constraint": "不能用刚性骨架思维！必须分析人体工效学舒适度、千万次弯曲疲劳。对标尼龙混合带。",
                 "ui_inputs": [{"label": "带体宽度 (mm)", "key": "width", "min": 15.0, "max": 80.0, "default": 40.0}, {"label": "带体厚度 (mm)", "key": "thickness", "min": 1.0, "max": 6.0, "default": 2.5}]
             },
             "智能穿戴承力外壳": {
-                "topology": "PLATE", "search_suffix": "smart wearable rigid enclosure lightweight durable", "constraint": "聚焦抗跌落冲击、高精细加工尺寸稳定性及亲肤防敏。对标钛合金或高强聚碳酸酯。",
+                "topology": "PLATE", "search_suffix": "smart wearable rigid enclosure lightweight durable", "constraint": "聚焦抗跌落冲击、加工尺寸稳定性及防敏。对标钛合金或高强聚碳酸酯。",
                 "ui_inputs": [{"label": "外壳长度 (mm)", "key": "length", "min": 20.0, "max": 100.0, "default": 45.0}, {"label": "外壳宽度 (mm)", "key": "width", "min": 15.0, "max": 80.0, "default": 35.0}, {"label": "设计壁厚 (mm)", "key": "thickness", "min": 0.5, "max": 3.0, "default": 1.2}]
             }
         }
@@ -495,7 +536,7 @@ if st.session_state["llm_report"]:
     st.markdown("#### ⚔️ 市场竞品对标剖析")
     st.info(data['market_positioning']['competitor_compare'])
 
-    # [舒展排版 3] 核心重点：双 3D 引擎展示（左侧宏观，右侧微观）
+    # [舒展排版 3] 核心重点：双 3D 引擎展示（左侧宏观，右侧微观云图）
     st.markdown("#### 📐 双重视角：宏观结构与微观特征仿真")
     col_draw_macro, col_draw_micro = st.columns(2)
     with col_draw_macro:
