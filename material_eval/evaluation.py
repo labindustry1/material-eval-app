@@ -9,7 +9,7 @@ from material_eval.conditions import Condition
 from material_eval.evidence import EvidenceCard, search_evidence
 from material_eval.laminates import LaminateResult, LaminateStack, analyze_laminate
 from material_eval.materials import MaterialCandidate
-from material_eval.reporting import ReportDraft, build_internal_report
+from material_eval.reporting import ReportDraft, build_internal_report, build_refusal_report
 from material_eval.storage import DEFAULT_DB_PATH, save_run
 from material_eval.uncertainty import EnvelopeReport, EnvelopeSpec
 
@@ -62,14 +62,18 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
     if request.material_envelope is not None:
         envelope_report = request.material_envelope.check(condition)
         if envelope_report.violations:
+            refusal = build_refusal_report(
+                material=request.material,
+                part=request.part,
+                condition=condition,
+                envelope_report=envelope_report,
+            )
             return EnvelopeRefusal(
                 material=request.material,
                 part=request.part,
                 condition=condition,
                 envelope_report=envelope_report,
-                refusal_markdown=_basic_refusal_markdown(
-                    request.material, request.part, envelope_report
-                ),
+                refusal_markdown=refusal.markdown,
             )
 
     # 3. 原有计算流程（保持 dims 给 calculate_part 兼容）

@@ -11,6 +11,53 @@ from material_eval.laminates import LaminateResult
 from material_eval.materials import MaterialCandidate
 from material_eval.report_schema import StructuredReport, build_structured_report
 from material_eval.scoring import Scorecard, build_scorecard
+from material_eval.uncertainty import EnvelopeReport
+
+
+@dataclass(frozen=True)
+class RefusalReport:
+    markdown: str
+    violations: tuple   # of Violation
+    suggested_alternatives: tuple[str, ...]
+    missing_data_hints: tuple[str, ...]
+
+
+def build_refusal_report(
+    *,
+    material,
+    part,
+    condition,
+    envelope_report: EnvelopeReport,
+    suggested_alternatives: tuple[str, ...] = (),
+    missing_data_hints: tuple[str, ...] = (),
+) -> RefusalReport:
+    lines = [
+        f"# 未出具评估：{material.name} 用于 {part.name}",
+        "",
+        "## 拒绝原因",
+        "",
+        "本次评估未出具数值结论，因为以下工况输入超出材料适用域：",
+        "",
+        "| 工况轴 | 输入值 | 允许范围 | 数据来源 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for v in envelope_report.violations:
+        lines.append(
+            f"| {v.axis} | {v.input_value} | [{v.allowed_range[0]}, {v.allowed_range[1]}] | {v.source or '未声明'} |"
+        )
+    if suggested_alternatives:
+        lines += ["", "## 已知适用该工况的同类材料", ""]
+        lines += [f"- {name}" for name in suggested_alternatives]
+    if missing_data_hints:
+        lines += ["", "## 若要继续评估需要补充的数据", ""]
+        lines += [f"- {hint}" for hint in missing_data_hints]
+    lines += ["", "*本工具拒绝在材料适用域之外出具数值结论，以避免误导内部研发判断。*"]
+    return RefusalReport(
+        markdown="\n".join(lines),
+        violations=envelope_report.violations,
+        suggested_alternatives=tuple(suggested_alternatives),
+        missing_data_hints=tuple(missing_data_hints),
+    )
 
 
 @dataclass(frozen=True)
@@ -31,6 +78,8 @@ def build_internal_report(
     calculation: CalculationResult,
     laminate_result: LaminateResult | None = None,
     evidence_cards: list[EvidenceCard],
+    envelope_report: EnvelopeReport | None = None,
+    condition=None,
 ) -> ReportDraft:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     title = f"{material.name}在{part.name}中的可行性初筛报告"
@@ -38,7 +87,7 @@ def build_internal_report(
 
     verdict, risks = _verdict(calculation, evidence_cards)
     metrics_md = "\n".join(
-        f"| {metric.name} | {metric.value.typical:.4g} | {metric.unit} | {metric.description} |"
+        f"| {metric.name} | {metric.value.format()} | {metric.unit} | {metric.description} |"
         for metric in calculation.metrics
     )
     dims_md = "\n".join(f"- {key}: {value:g} mm" for key, value in dimensions.items())
@@ -51,6 +100,7 @@ def build_internal_report(
     warnings_md = "\n".join(f"- {item}" for item in calculation.warnings) or "- 暂无计算模块告警。"
     risks_md = "\n".join(f"- {item}" for item in risks)
     laminate_md = _laminate_markdown(laminate_result)
+    envelope_section_md = _envelope_section_markdown(envelope_report, condition)
     scorecard = build_scorecard(
         material=material,
         part=part,
@@ -110,7 +160,7 @@ def build_internal_report(
 
 ## 4. 工程初筛结果
 
-| 指标 | 数值 | 单位 | 说明 |
+| 指标 | 区间 | 单位 | 说明 |
 | --- | ---: | --- | --- |
 {metrics_md}
 
@@ -141,6 +191,13 @@ def build_internal_report(
 - 补齐材料测试条件：温度、湿度、方向、应变率、样条尺寸、测试标准。
 - 对当前目标零部件建立基准材料对照实验。
 - 若初筛结果有价值，再进入复合铺层、疲劳、冲击或真实 FEA/显式动力学仿真。
+{envelope_section_md}
+## 不确定度说明
+
+本报告所有数值以三点区间 (low / typical / high) 表达。
+- 来源单点观察的属性按 confidence 自动展开（high=±5%, medium=±15%, low=±30%）
+- 来源多点观察聚合 (min / 最高置信度 / max)
+- 若需收窄某项区间，请补充供应商数据表、内部实验记录或行业标准引用，并在材料属性库 seed 中升级到三点区间。
 """
 
     report_json = {
@@ -220,11 +277,11 @@ def _laminate_markdown(laminate_result: LaminateResult | None) -> str:
 ### 4.1 复合铺层初筛
 
 - 方法：{laminate_result.method}
-- 总厚度：{laminate_result.total_thickness_mm.typical:.4g} mm
-- 等效 Ex：{laminate_result.ex_gpa.typical:.4g} GPa
-- 等效 Ey：{laminate_result.ey_gpa.typical:.4g} GPa
-- 等效 Gxy：{laminate_result.gxy_gpa.typical:.4g} GPa
-- 等效 νxy：{laminate_result.nuxy.typical:.4g}
+- 总厚度：{laminate_result.total_thickness_mm.format()} mm
+- 等效 Ex：{laminate_result.ex_gpa.format()} GPa
+- 等效 Ey：{laminate_result.ey_gpa.format()} GPa
+- 等效 Gxy：{laminate_result.gxy_gpa.format()} GPa
+- 等效 νxy：{laminate_result.nuxy.format()}
 
 铺层告警：
 
@@ -270,6 +327,64 @@ def _scorecard_markdown(scorecard: Scorecard) -> str:
             f"| {dimension.name} | {dimension.score:.2f} | {dimension.weight:.0%} | {dimension.rationale} |"
         )
     return "\n".join(rows)
+
+
+def _envelope_section_markdown(envelope_report: EnvelopeReport | None, condition) -> str:
+    """Build the '工况包络校验' section markdown.
+
+    Returns an empty string when envelope_report is None (caller has not provided
+    envelope information).  When envelope_report.has_declared_envelope is False
+    a one-line notice is rendered instead of a table.
+    """
+    if envelope_report is None:
+        return ""
+
+    from material_eval.uncertainty import _ENVELOPE_AXES  # local import to avoid circular
+
+    header = "\n## 工况包络校验\n"
+    source_label = envelope_report.violations[0].source if envelope_report.violations else "未声明"
+    # Try to extract a single source label from violations or a generic note.
+    sources = {v.source for v in envelope_report.violations if v.source}
+    source_display = "；".join(sorted(sources)) if sources else "未声明"
+    header += f"\n数据来源：{source_display}\n"
+
+    if not envelope_report.has_declared_envelope:
+        return header + "\n该材料未声明适用域，工况校验跳过\n"
+
+    # Build a set of violating axes for quick lookup
+    violation_axes = {v.axis: v for v in envelope_report.violations}
+
+    # Collect allowed ranges from violations (all we have without the spec object)
+    # and gather all input values from condition
+    axes_inputs: dict[str, float | None] = {}
+    if condition is not None:
+        raw = condition.envelope_axes()
+        for axis in _ENVELOPE_AXES:
+            val = raw.get(axis)
+            if val is not None:
+                axes_inputs[axis] = val
+    # Also include axes from violations (in case condition is None)
+    for v in envelope_report.violations:
+        if v.axis not in axes_inputs:
+            axes_inputs[v.axis] = v.input_value
+
+    if not axes_inputs:
+        return header + "\n（无可用工况轴输入）\n"
+
+    rows = [
+        "| 工况轴 | 输入值 | 允许范围 | 状态 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for axis, input_val in axes_inputs.items():
+        if axis in violation_axes:
+            v = violation_axes[axis]
+            lo, hi = v.allowed_range
+            rows.append(f"| {axis} | {input_val} | [{lo}, {hi}] | ✗ |")
+        else:
+            # Passed — we don't have the spec range stored here, show "—" for range
+            rows.append(f"| {axis} | {input_val} | — | ✓ |")
+
+    return header + "\n" + "\n".join(rows) + "\n"
 
 
 def _safe_filename(value: str) -> str:
