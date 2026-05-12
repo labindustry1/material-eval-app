@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from material_eval.materials import MaterialCandidate
+from material_eval.uncertainty import EnvelopeSpec, Interval
 from material_eval.units import normalize_material_property
 
 
@@ -19,6 +20,7 @@ class MaterialRecord:
     category: str
     form: str
     process: str
+    envelope: EnvelopeSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,7 @@ class MaterialPropertyObservation:
     source_type: str
     source_label: str
     confidence: float
+    interval: Interval = field(default=None)  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,7 @@ class MaterialPropertyLibrary:
                 category=item["category"],
                 form=item.get("form", ""),
                 process=item.get("process", ""),
+                envelope=self._build_envelope(item.get("envelope")),
             )
             for item in raw.get("materials", [])
         }
@@ -91,9 +95,9 @@ class MaterialPropertyLibrary:
         return MaterialCandidate(
             name=material.name,
             category=material.category,
-            density_g_cm3=density.canonical_value,
-            tensile_strength_mpa=strength.canonical_value,
-            elastic_modulus_gpa=modulus.canonical_value,
+            density_g_cm3=density.interval,
+            tensile_strength_mpa=strength.interval,
+            elastic_modulus_gpa=modulus.interval,
             notes=(
                 f"来自材料属性库 {self.version}；属性为典型工程参考值，需按供应商/实验/标准复核。"
                 f" 来源：{density.source_label}；{strength.source_label}；{modulus.source_label}。"
@@ -137,22 +141,97 @@ class MaterialPropertyLibrary:
                 )
         return sorted(conflicts, key=lambda item: (item.material_id, item.property_name))
 
+    def property_interval(self, material_id: str, property_name: str) -> Interval | None:
+        """Aggregate all observations of (material_id, property_name) into a single Interval.
+
+        Single observation -> its own Interval.
+        Multi observation -> Interval(low=min(all.low), typical=highest-confidence.typical, high=max(all.high))
+        Returns None if no observations found.
+        """
+        candidates = self.observations_for(material_id=material_id, property_name=property_name)
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0].interval
+        best = sorted(candidates, key=lambda o: (o.confidence, o.source_label), reverse=True)[0]
+        agg_low = min(o.interval.low for o in candidates)
+        agg_high = max(o.interval.high for o in candidates)
+        return Interval(low=agg_low, typical=best.interval.typical, high=agg_high, unit=best.interval.unit)
+
+    def envelope_for(self, material_id: str) -> EnvelopeSpec | None:
+        """Return envelope of material if declared, else None."""
+        record = self.materials.get(material_id)
+        if record is None:
+            return None
+        return record.envelope
+
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
             raise FileNotFoundError(f"Material property library seed not found: {self.path}")
         return json.loads(self.path.read_text(encoding="utf-8"))
 
+    @staticmethod
+    def _build_envelope(raw_envelope: dict[str, Any] | None) -> EnvelopeSpec | None:
+        if raw_envelope is None:
+            return None
+        _ENVELOPE_AXES = (
+            "temperature_C",
+            "humidity_pct",
+            "stress_MPa",
+            "strain_rate_1_per_s",
+            "fatigue_cycles",
+            "thickness_mm",
+        )
+        kwargs: dict[str, Any] = {}
+        for axis in _ENVELOPE_AXES:
+            raw_val = raw_envelope.get(axis)
+            if raw_val is not None:
+                lo, hi = raw_val
+                kwargs[axis] = (float(lo), float(hi))
+        source = raw_envelope.get("source")
+        if source is not None:
+            kwargs["source"] = source
+        return EnvelopeSpec(**kwargs)
+
     def _build_observation(self, item: dict[str, Any]) -> MaterialPropertyObservation:
-        normalized = normalize_material_property(item["property_name"], item["value"], item["unit"])
+        raw_value = item["value"]
+        confidence = max(0.0, min(1.0, float(item.get("confidence", 0.0))))
+
+        if isinstance(raw_value, dict):
+            # Three-point format: {"low": ..., "typical": ..., "high": ...}
+            raw_low = raw_value["low"]
+            raw_typical = raw_value["typical"]
+            raw_high = raw_value["high"]
+            norm_low = normalize_material_property(item["property_name"], raw_low, item["unit"])
+            norm_typical = normalize_material_property(item["property_name"], raw_typical, item["unit"])
+            norm_high = normalize_material_property(item["property_name"], raw_high, item["unit"])
+            canonical_value = norm_typical.value
+            canonical_unit = norm_typical.unit
+            interval = Interval(
+                low=norm_low.value,
+                typical=norm_typical.value,
+                high=norm_high.value,
+                unit=canonical_unit,
+            )
+            scalar_value = float(raw_typical)
+        else:
+            # Single-point format
+            normalized = normalize_material_property(item["property_name"], raw_value, item["unit"])
+            canonical_value = normalized.value
+            canonical_unit = normalized.unit
+            interval = Interval.from_confidence(canonical_value, canonical_unit, confidence)
+            scalar_value = float(raw_value)
+
         return MaterialPropertyObservation(
             material_id=item["material_id"],
             property_name=item["property_name"],
-            value=float(item["value"]),
+            value=scalar_value,
             unit=item["unit"],
-            canonical_value=normalized.value,
-            canonical_unit=normalized.unit,
+            canonical_value=canonical_value,
+            canonical_unit=canonical_unit,
             test_condition=item.get("test_condition", ""),
             source_type=item.get("source_type", ""),
             source_label=item.get("source_label", ""),
-            confidence=max(0.0, min(1.0, float(item.get("confidence", 0.0)))),
+            confidence=confidence,
+            interval=interval,
         )

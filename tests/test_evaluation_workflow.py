@@ -95,5 +95,78 @@ class EvaluationWorkflowTest(unittest.TestCase):
         self.assertIn("laminate", draft.report.report_json)
 
 
+class EnvelopeShortCircuitTest(unittest.TestCase):
+    def _make_material(self) -> "MaterialCandidate":
+        from material_eval.materials import MaterialCandidate
+        from material_eval.uncertainty import Interval
+
+        return MaterialCandidate(
+            name="test",
+            category="m",
+            density_g_cm3=Interval.point(2.7, "g/cm^3"),
+            tensile_strength_mpa=Interval.point(300, "MPa"),
+            elastic_modulus_gpa=Interval.point(70, "GPa"),
+        )
+
+    def _make_part(self) -> "PartTemplate":
+        from material_eval.catalog import PartTemplate
+
+        return PartTemplate(
+            domain="d",
+            name="测试零件",
+            topology="STRAP",
+            constraint="",
+            search_suffix="",
+            geometry_inputs=(),
+        )
+
+    def test_out_of_envelope_returns_refusal(self):
+        from material_eval.evaluation import EnvelopeRefusal, EvaluationRequest, run_evaluation
+        from material_eval.conditions import Condition, Quantity
+        from material_eval.uncertainty import EnvelopeSpec
+
+        material = self._make_material()
+        part = self._make_part()
+        envelope = EnvelopeSpec(temperature_C=(-40, 80), source="seed")
+        condition = Condition.from_dimensions(
+            {"length": 1000, "width": 30, "thickness": 2},
+            temperature=Quantity(value=150.0, unit="degC"),
+        )
+        request = EvaluationRequest(
+            material=material,
+            part=part,
+            dimensions={"length": 1000, "width": 30, "thickness": 2},
+            condition=condition,
+            material_envelope=envelope,
+        )
+        result = run_evaluation(request)
+        self.assertIsInstance(result, EnvelopeRefusal)
+        self.assertEqual(len(result.envelope_report.violations), 1)
+        self.assertEqual(result.envelope_report.violations[0].axis, "temperature_C")
+        self.assertIn("未出具评估", result.refusal_markdown)
+
+    def test_in_envelope_returns_normal_draft(self):
+        from material_eval.evaluation import EvaluationDraft, EvaluationRequest, run_evaluation
+        from material_eval.conditions import Condition, Quantity
+        from material_eval.uncertainty import EnvelopeSpec
+
+        material = self._make_material()
+        part = self._make_part()
+        envelope = EnvelopeSpec(temperature_C=(-40, 80), source="seed")
+        condition = Condition.from_dimensions(
+            {"length": 1000, "width": 30, "thickness": 2},
+            temperature=Quantity(value=25.0, unit="degC"),
+        )
+        request = EvaluationRequest(
+            material=material,
+            part=part,
+            dimensions={"length": 1000, "width": 30, "thickness": 2},
+            condition=condition,
+            material_envelope=envelope,
+        )
+        result = run_evaluation(request)
+        self.assertIsInstance(result, EvaluationDraft)
+
+
 if __name__ == "__main__":
     unittest.main()

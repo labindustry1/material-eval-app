@@ -6,6 +6,7 @@ from material_eval.catalog import PartTemplate
 from material_eval.computation import CalculationResult
 from material_eval.evidence import EvidenceCard
 from material_eval.materials import MaterialCandidate
+from material_eval.uncertainty import EnvelopeSpec, Interval
 
 
 class ScoreDimension(BaseModel):
@@ -36,12 +37,37 @@ def build_scorecard(
     calculation: CalculationResult,
     evidence_cards: list[EvidenceCard],
     risks: list[str],
+    envelope: EnvelopeSpec | None = None,
+    condition=None,
 ) -> Scorecard:
+    # Collect Interval values for data_confidence scoring
+    material_intervals: list[Interval] = [
+        material.density_g_cm3,
+        material.tensile_strength_mpa,
+        material.elastic_modulus_gpa,
+    ]
+    calc_intervals: list[Interval] = [m.value for m in calculation.metrics]
+    all_intervals = material_intervals + calc_intervals
+
+    legacy_data_score = _data_confidence_score(evidence_cards, material)
+    if all_intervals:
+        interval_score = score_data_confidence(all_intervals) * 100
+        data_conf_score = (legacy_data_score + interval_score) / 2
+    else:
+        data_conf_score = legacy_data_score
+
+    legacy_op_risk = _operating_risk_score(part, calculation, risks)
+    if envelope is not None and condition is not None:
+        envelope_score = score_condition_risk(envelope, condition) * 100
+        op_risk_score = (legacy_op_risk + envelope_score) / 2
+    else:
+        op_risk_score = legacy_op_risk
+
     dimensions = [
         _dimension(
             "data_confidence",
             "数据可信度",
-            _data_confidence_score(evidence_cards, material),
+            data_conf_score,
             0.20,
             f"检索到 {len(evidence_cards)} 条证据卡；材料备注为：{material.notes or '无'}。",
         ),
@@ -50,7 +76,7 @@ def build_scorecard(
             "本征性能潜力",
             _intrinsic_performance_score(material),
             0.20,
-            f"比强度 {material.specific_strength:.4g}，比模量 {material.specific_modulus:.4g}。",
+            f"比强度 {material.specific_strength_typical:.4g}，比模量 {material.specific_modulus_typical:.4g}。",
         ),
         _dimension(
             "structural_fit",
@@ -62,7 +88,7 @@ def build_scorecard(
         _dimension(
             "operating_risk",
             "工况风险可控性",
-            _operating_risk_score(part, calculation, risks),
+            op_risk_score,
             0.15,
             f"风险项 {len(risks)} 项；告警 {len(calculation.warnings)} 项。",
         ),
@@ -89,6 +115,54 @@ def build_scorecard(
     )
 
 
+def score_data_confidence(intervals: list[Interval]) -> float:
+    """Map max(relative_width) -> [0..1]. width<0.1 ->1.0, <0.3 ->0.7, <0.6 ->0.4, else 0.1."""
+    if not intervals:
+        return 0.5
+    max_width = max(iv.relative_width() for iv in intervals)
+    if max_width < 0.1:
+        return 1.0
+    if max_width < 0.3:
+        return 0.7
+    if max_width < 0.6:
+        return 0.4
+    return 0.1
+
+
+def score_condition_risk(envelope: EnvelopeSpec, condition) -> float:
+    """Min margin to envelope boundary -> [0..1]. >0.3 ->1.0, >0.15 ->0.7, >0.05 ->0.4, else 0.1."""
+    if not envelope.has_any_axis():
+        return 0.5
+    inputs = condition.envelope_axes()
+    margins: list[float] = []
+    for axis in ("temperature_C", "humidity_pct", "stress_MPa",
+                 "strain_rate_1_per_s", "fatigue_cycles", "thickness_mm"):
+        allowed = getattr(envelope, axis)
+        if allowed is None:
+            continue
+        actual = inputs.get(axis)
+        if actual is None:
+            continue
+        lo, hi = allowed
+        span = hi - lo
+        if span <= 0:
+            continue
+        dist_lo = actual - lo
+        dist_hi = hi - actual
+        margin = min(dist_lo, dist_hi) / span
+        margins.append(margin)
+    if not margins:
+        return 0.5
+    min_margin = min(margins)
+    if min_margin > 0.3:
+        return 1.0
+    if min_margin > 0.15:
+        return 0.7
+    if min_margin > 0.05:
+        return 0.4
+    return 0.1
+
+
 def _dimension(dimension_id: str, name: str, score: float, weight: float, rationale: str) -> ScoreDimension:
     return ScoreDimension(
         dimension_id=dimension_id,
@@ -111,9 +185,9 @@ def _data_confidence_score(evidence_cards: list[EvidenceCard], material: Materia
 
 
 def _intrinsic_performance_score(material: MaterialCandidate) -> float:
-    strength_component = min(material.specific_strength / 3500, 1.0) * 55
-    modulus_component = min(material.specific_modulus / 120, 1.0) * 35
-    density_bonus = 10 if material.density_g_cm3 <= 1.6 else 0
+    strength_component = min(material.specific_strength_typical / 3500, 1.0) * 55
+    modulus_component = min(material.specific_modulus_typical / 120, 1.0) * 35
+    density_bonus = 10 if material.density_g_cm3.typical <= 1.6 else 0
     return strength_component + modulus_component + density_bonus
 
 

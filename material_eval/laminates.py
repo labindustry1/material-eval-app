@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+# Phase 1 note: Lamina inputs are user-supplied floats (no uncertainty), so
+# LaminateResult fields are zero-width Intervals.  Phase 2 failure-criteria
+# will introduce non-zero widths when ply-property Intervals are available.
+
 import math
 from dataclasses import dataclass, field
+
+from material_eval.uncertainty import Interval
 
 
 @dataclass(frozen=True)
@@ -44,12 +50,12 @@ class LaminateStack:
 
 @dataclass(frozen=True)
 class LaminateResult:
-    total_thickness_mm: float
+    total_thickness_mm: Interval     # zero-width in Phase 1; Phase 2 will use ply-property Intervals
     a_matrix: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]
-    ex_gpa: float
-    ey_gpa: float
-    gxy_gpa: float
-    nuxy: float
+    ex_gpa: Interval
+    ey_gpa: Interval
+    gxy_gpa: Interval
+    nuxy: Interval                   # dimensionless → unit=""
     method: str = "classical-laminate-theory"
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
@@ -82,12 +88,12 @@ def analyze_laminate(stack: LaminateStack) -> LaminateResult:
         warnings.append("铺层不是平衡/对称配置，MVP 仅输出 A 矩阵初筛，不判断弯扭耦合。")
 
     return LaminateResult(
-        total_thickness_mm=total_thickness,
+        total_thickness_mm=Interval.point(total_thickness, "mm"),
         a_matrix=tuple(tuple(float(item) for item in row) for row in a_matrix),  # type: ignore[arg-type]
-        ex_gpa=ex,
-        ey_gpa=ey,
-        gxy_gpa=gxy,
-        nuxy=nuxy,
+        ex_gpa=Interval.point(ex, "GPa"),
+        ey_gpa=Interval.point(ey, "GPa"),
+        gxy_gpa=Interval.point(gxy, "GPa"),
+        nuxy=Interval.point(nuxy, ""),
         warnings=tuple(warnings),
     )
 

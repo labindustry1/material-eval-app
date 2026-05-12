@@ -8,13 +8,13 @@ import streamlit as st
 
 from material_eval.artifacts import write_markdown_report
 from material_eval.catalog import Catalog
-from material_eval.evaluation import EvaluationRequest, run_evaluation, save_evaluation
+from material_eval.evaluation import EnvelopeRefusal, EvaluationRequest, run_evaluation, save_evaluation
 from material_eval.laminates import Lamina, LaminateStack
 from material_eval.material_property_library import MaterialPropertyLibrary
 from material_eval.materials import MaterialCandidate, build_composite_material, build_single_material
 from material_eval.openai_provider import polish_report_with_openai
 from material_eval.rag_eval import default_retrieval_questions, run_retrieval_evaluation
-from material_eval.storage import list_recent_runs, list_report_reviews, save_report_review
+from material_eval.storage import append_refusal_log, list_recent_runs, list_report_reviews, save_report_review
 
 
 def run_app() -> None:
@@ -29,8 +29,8 @@ def run_app() -> None:
     st.title("材料可行性评估 MVP")
     st.caption("面向内部研发的轻量初筛工具：材料参数、零部件模板、内部资料证据和确定性计算先跑通。")
 
-    request, use_openai, run_button = render_sidebar(catalog)
-    render_material_summary(request.material)
+    request, use_openai, run_button, material_id = render_sidebar(catalog)
+    render_material_summary(request.material, material_id=material_id)
 
     st.divider()
 
@@ -40,7 +40,16 @@ def run_app() -> None:
         st.info("选择左侧配置后点击“运行内部初筛”。")
         return
 
-    draft = run_evaluation(request)
+    result = run_evaluation(request)
+    if isinstance(result, EnvelopeRefusal):
+        st.error("⛔ 本次评估未出具数值结论：工况输入超出材料适用域")
+        st.markdown(result.refusal_markdown)
+        try:
+            append_refusal_log(result)
+        except Exception as exc:
+            st.warning(f"refusal 日志写入失败（不影响 UI 输出）：{exc}")
+        return  # 不渲染任何 tab
+    draft = result  # 现在确定是 EvaluationDraft
     report_markdown = maybe_polish_report(draft.report.markdown, use_openai=use_openai)
     run_id = save_evaluation(draft, report_markdown=report_markdown)
     report_path = write_markdown_report(filename=f"{run_id}-{draft.report.filename}", markdown=report_markdown)
@@ -91,7 +100,7 @@ def load_material_library() -> MaterialPropertyLibrary:
     return MaterialPropertyLibrary()
 
 
-def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool]:
+def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool, str | None]:
     with st.sidebar:
         st.header("1. 目标零部件")
         mvp_only = st.toggle("只显示 MVP 首测场景", value=True)
@@ -111,7 +120,7 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool]:
         with st.expander("约束摘要", expanded=False):
             st.write(part.constraint)
 
-        material, laminate_stack = render_material_form()
+        material, laminate_stack, material_id_chosen = render_material_form()
         dimensions = render_dimension_form(part)
 
         st.header("4. 生成")
@@ -126,6 +135,12 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool]:
         use_openai = st.checkbox("使用 OpenAI 润色报告（可选）", value=False)
         run_button = st.button("运行内部初筛", type="primary", width="stretch")
 
+    # 若用户从材料库选了具体 ID，则注入 envelope；自由输入时为 None
+    material_envelope = None
+    if material_id_chosen is not None:
+        library = load_material_library()
+        material_envelope = library.envelope_for(material_id_chosen)
+
     return (
         EvaluationRequest(
             material=material,
@@ -133,13 +148,19 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool]:
             dimensions=dimensions,
             retrieval_mode=retrieval_mode,
             laminate_stack=laminate_stack,
+            material_envelope=material_envelope,
         ),
         use_openai,
         run_button,
+        material_id_chosen,  # may be None for free-entry / composite modes
     )
 
 
-def render_material_form() -> tuple[MaterialCandidate, LaminateStack | None]:
+def render_material_form() -> tuple[MaterialCandidate, LaminateStack | None, str | None]:
+    """Return (material, laminate_stack, material_id_or_none).
+
+    material_id_or_none is non-None only when the user picks from the library.
+    """
     st.header("2. 材料体系")
     material_mode = st.radio("材料模式", ["单一均质材料", "从基准材料库选择", "复合/杂化材料体系"])
     if material_mode == "单一均质材料":
@@ -155,6 +176,7 @@ def render_material_form() -> tuple[MaterialCandidate, LaminateStack | None]:
                 elastic_modulus_gpa=st.number_input("弹性模量 (GPa)", value=100.0, min_value=0.0),
             ),
             None,
+            None,  # no material_id for free-entry mode
         )
     if material_mode == "从基准材料库选择":
         library = load_material_library()
@@ -180,7 +202,7 @@ def render_material_form() -> tuple[MaterialCandidate, LaminateStack | None]:
             conflicts = library.detect_conflicts(material_id=selected_id)
             if conflicts:
                 st.warning("该材料存在属性来源差异，报告结论需复核。")
-        return candidate, None
+        return candidate, None, selected_id  # return library material_id
 
     st.caption("MVP 使用线性混合定律，只作为初筛估算。")
     matrix_name = st.selectbox("基体", ["环氧树脂", "PEEK", "PLA/PHA降解树脂", "铝合金"])
@@ -213,7 +235,7 @@ def render_material_form() -> tuple[MaterialCandidate, LaminateStack | None]:
         fiber_modulus=fiber_modulus,
         fiber_volume_fraction=vf,
     )
-    return material, laminate_stack
+    return material, laminate_stack, None  # composite mode has no library material_id
 
 
 def render_laminate_form(*, matrix_modulus: float, fiber_modulus: float, fiber_volume_fraction: float) -> LaminateStack | None:
@@ -264,13 +286,29 @@ def render_dimension_form(part) -> dict[str, float]:
     }
 
 
-def render_material_summary(material: MaterialCandidate) -> None:
+def render_material_summary(material: MaterialCandidate, *, material_id: str | None = None) -> None:
     st.subheader("当前评估对象")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("材料", material.name)
-    c2.metric("密度", f"{material.density_g_cm3:.3g} g/cm³")
-    c3.metric("抗拉强度", f"{material.tensile_strength_mpa:.4g} MPa")
-    c4.metric("弹性模量", f"{material.elastic_modulus_gpa:.4g} GPa")
+    c2.metric("密度", f"{material.density_g_cm3.typical:.3g} g/cm³")
+    c3.metric("抗拉强度", f"{material.tensile_strength_mpa.typical:.4g} MPa")
+    c4.metric("弹性模量", f"{material.elastic_modulus_gpa.typical:.4g} GPa")
+
+    if material_id is not None:
+        lib = load_material_library()
+        env = lib.envelope_for(material_id)
+        if env is not None and env.has_any_axis():
+            env_caption = "✅ 已声明适用域"
+        else:
+            env_caption = "⚠️ 未声明适用域"
+        has_three_point = False
+        for prop in ("density_g_cm3", "tensile_strength_mpa", "elastic_modulus_gpa"):
+            iv = lib.property_interval(material_id, prop)
+            if iv and iv.high > iv.low:
+                has_three_point = True
+                break
+        iv_caption = "✅ 三点区间数据" if has_three_point else "⚠️ 单点数据（按 confidence 自动展开）"
+        st.caption(f"{env_caption}　·　{iv_caption}")
 
 
 def maybe_polish_report(markdown: str, *, use_openai: bool) -> str:
@@ -313,10 +351,10 @@ def render_laminate_result(laminate_result) -> None:
         return
     st.subheader("复合铺层初筛")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ex", f"{laminate_result.ex_gpa:.3g} GPa")
-    c2.metric("Ey", f"{laminate_result.ey_gpa:.3g} GPa")
-    c3.metric("Gxy", f"{laminate_result.gxy_gpa:.3g} GPa")
-    c4.metric("总厚度", f"{laminate_result.total_thickness_mm:.3g} mm")
+    c1.metric("Ex", f"{laminate_result.ex_gpa.typical:.3g} GPa")
+    c2.metric("Ey", f"{laminate_result.ey_gpa.typical:.3g} GPa")
+    c3.metric("Gxy", f"{laminate_result.gxy_gpa.typical:.3g} GPa")
+    c4.metric("总厚度", f"{laminate_result.total_thickness_mm.typical:.3g} mm")
     st.dataframe(
         pd.DataFrame(laminate_result.a_matrix, columns=["A1", "A2", "A6"]),
         hide_index=True,

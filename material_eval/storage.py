@@ -265,3 +265,34 @@ def save_report_review(
 
 def list_report_reviews(run_id: int, db_path: Path | str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
     return [review.__dict__ for review in SqliteRunRepository(db_path).list_reviews(run_id)]
+
+
+DEFAULT_REFUSAL_LOG = Path(__file__).resolve().parents[1] / "data" / "refusal_log.jsonl"
+
+
+def append_refusal_log(refusal, *, log_path: Path | None = None) -> Path:
+    """Append an EnvelopeRefusal record to a JSON-Lines audit log.
+
+    Refusals are intentionally NOT written to the main evaluation_runs table —
+    a refused evaluation has no calculation result, so storing it there would
+    pollute history. JSONL keeps it lightweight and append-only.
+    """
+    path = log_path or DEFAULT_REFUSAL_LOG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "material": refusal.material.name,
+        "part": refusal.part.name,
+        "violations": [
+            {
+                "axis": v.axis,
+                "input": v.input_value,
+                "allowed": [v.allowed_range[0], v.allowed_range[1]],
+                "source": v.source,
+            }
+            for v in refusal.envelope_report.violations
+        ],
+    }
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    return path

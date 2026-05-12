@@ -16,6 +16,45 @@ ClaimSupportLevel = Literal["direct", "context", "needs_review"]
 ClaimType = Literal["verdict", "performance", "risk", "evidence", "assumption"]
 
 
+class IntervalPayload(BaseModel):
+    low: float
+    typical: float
+    high: float
+    unit: str
+    widened: bool = False
+
+    @classmethod
+    def from_interval(cls, iv) -> "IntervalPayload":
+        return cls(low=iv.low, typical=iv.typical, high=iv.high, unit=iv.unit, widened=iv.widened)
+
+
+class ViolationPayload(BaseModel):
+    axis: str
+    input_value: float
+    allowed_low: float
+    allowed_high: float
+    source: str | None = None
+
+
+class EnvelopeReportPayload(BaseModel):
+    has_declared_envelope: bool
+    violations: list[ViolationPayload] = []
+
+    @classmethod
+    def from_report(cls, report) -> "EnvelopeReportPayload":
+        return cls(
+            has_declared_envelope=report.has_declared_envelope,
+            violations=[
+                ViolationPayload(
+                    axis=v.axis, input_value=v.input_value,
+                    allowed_low=v.allowed_range[0], allowed_high=v.allowed_range[1],
+                    source=v.source,
+                )
+                for v in report.violations
+            ],
+        )
+
+
 class ClaimBinding(BaseModel):
     source_type: ClaimSourceType
     reference_id: str
@@ -24,6 +63,7 @@ class ClaimBinding(BaseModel):
     value: float | str | None = None
     unit: str | None = None
     note: str = ""
+    interval: IntervalPayload | None = None
 
 
 class ReportClaim(BaseModel):
@@ -44,6 +84,7 @@ class StructuredReport(BaseModel):
     created_at: str
     claims: list[ReportClaim] = Field(min_length=1)
     open_questions: list[str] = Field(default_factory=list)
+    envelope_report: EnvelopeReportPayload | None = None
 
     def source_type_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -92,7 +133,7 @@ def build_structured_report(
                 claim_id=_claim_id(len(claims) + 1),
                 section="工程初筛结果",
                 claim_type="performance",
-                text=f"{metric.name} 为 {metric.value:.4g} {metric.unit}，用于 {part.name} 的 MVP 初筛。",
+                text=f"{metric.name} 为 {metric.value.typical:.4g} {metric.unit}，用于 {part.name} 的 MVP 初筛。",
                 confidence=0.72 if not calculation.warnings else 0.62,
                 bindings=[
                     ClaimBinding(
@@ -100,7 +141,7 @@ def build_structured_report(
                         reference_id=f"{calculation.version}:{calculation.topology}:metric:{idx}",
                         reference_label=metric.name,
                         support_level="direct",
-                        value=metric.value,
+                        value=metric.value.typical,
                         unit=metric.unit,
                         note=metric.description,
                     )
@@ -115,8 +156,8 @@ def build_structured_report(
                 section="复合铺层初筛",
                 claim_type="performance",
                 text=(
-                    f"CLT 等效 Ex={laminate_result.ex_gpa:.4g} GPa、"
-                    f"Ey={laminate_result.ey_gpa:.4g} GPa，可作为铺层刚度初筛输入。"
+                    f"CLT 等效 Ex={laminate_result.ex_gpa.typical:.4g} GPa、"
+                    f"Ey={laminate_result.ey_gpa.typical:.4g} GPa，可作为铺层刚度初筛输入。"
                 ),
                 confidence=0.58 if laminate_result.warnings else 0.66,
                 bindings=[
@@ -125,7 +166,7 @@ def build_structured_report(
                         reference_id=laminate_result.method,
                         reference_label="Classical Laminate Theory A matrix",
                         support_level="direct",
-                        value=laminate_result.ex_gpa,
+                        value=laminate_result.ex_gpa.typical,
                         unit="GPa",
                         note="当前未包含失效准则和环境衰减。",
                     )
