@@ -12,7 +12,8 @@ from material_eval.evaluation import EnvelopeRefusal, EvaluationRequest, run_eva
 from material_eval.laminates import Lamina, LaminateStack
 from material_eval.material_property_library import MaterialPropertyLibrary
 from material_eval.materials import MaterialCandidate, build_composite_material, build_single_material
-from material_eval.openai_provider import polish_report_with_openai
+from material_eval.llm_provider import polish_report_with_llm
+from material_eval.openai_provider import polish_report_with_openai  # legacy alias
 from material_eval.rag_eval import default_retrieval_questions, run_retrieval_evaluation
 from material_eval.storage import append_refusal_log, list_recent_runs, list_report_reviews, save_report_review
 
@@ -105,7 +106,11 @@ def load_material_library() -> MaterialPropertyLibrary:
 def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool, str | None]:
     with st.sidebar:
         st.header("1. 目标零部件")
-        mvp_only = st.toggle("只显示 MVP 首测场景", value=True)
+        mvp_only = st.toggle(
+            "只显示 MVP 首测场景",
+            value=False,
+            help="勾选后只显示原型期重点验证的 3 个零部件；默认关闭，展示全部行业和零件库。",
+        )
         if mvp_only:
             available_parts = catalog.mvp_parts()
             domains = sorted({part.domain for part in available_parts})
@@ -135,7 +140,11 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool, str
         retrieval_mode = "embedding" if retrieval_label.startswith("BGE-M3") else "bm25"
         if retrieval_mode == "embedding":
             st.caption("首次启用会加载 BAAI/bge-m3；未安装 FlagEmbedding 时自动回退 BM25。")
-        use_openai = st.checkbox("使用 OpenAI 润色报告（可选）", value=False)
+        use_openai = st.checkbox(
+            "使用 LLM 润色报告（可选）",
+            value=False,
+            help="自动检测环境变量：DEEPSEEK_API_KEY 优先于 OPENAI_API_KEY。本地确定性报告永远是真源，润色只改文字不改数据。",
+        )
         run_button = st.button("运行内部初筛", type="primary", width="stretch")
 
     # 若用户从材料库选了具体 ID，则注入 envelope 和 strength_allowables；自由输入时为 None
@@ -354,9 +363,10 @@ def render_material_summary(material: MaterialCandidate, *, material_id: str | N
 def maybe_polish_report(markdown: str, *, use_openai: bool) -> str:
     if not use_openai:
         return markdown
-    polished = polish_report_with_openai(markdown)
+    polished = polish_report_with_llm(markdown)
     if polished.ok:
-        st.success("OpenAI 润色完成。")
+        provider_label = {"deepseek": "DeepSeek", "openai": "OpenAI"}.get(polished.provider, polished.provider)
+        st.success(f"{provider_label} 润色完成。")
     else:
         st.warning(polished.error)
     return polished.text
@@ -366,14 +376,26 @@ def render_calculation(calculation) -> None:
     rows = calculation.as_rows()
     df = pd.DataFrame(rows)
     st.dataframe(df, hide_index=True, width="stretch")
-    if rows:
+    if calculation.metrics:
+        chart_df = pd.DataFrame([
+            {
+                "指标": m.name,
+                "low": m.value.low,
+                "typical": m.value.typical,
+                "high": m.value.high,
+                "单位": m.value.unit or "",
+            }
+            for m in calculation.metrics
+        ])
         fig = px.bar(
-            df,
-            x="数值",
+            chart_df,
+            x="typical",
             y="指标",
             orientation="h",
+            error_x=chart_df["high"] - chart_df["typical"],
+            error_x_minus=chart_df["typical"] - chart_df["low"],
             text="单位",
-            title="初筛指标概览",
+            title="初筛指标概览（典型值 + 不确定度区间）",
         )
         fig.update_layout(height=320, showlegend=False, margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig, width="stretch")

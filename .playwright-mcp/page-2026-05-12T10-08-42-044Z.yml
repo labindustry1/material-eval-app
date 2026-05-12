@@ -1,0 +1,235 @@
+- generic:
+  - generic:
+    - generic [ref=e2]:
+      - generic [ref=e7]:
+        - button "keyboard_double_arrow_left" [ref=e497] [cursor=pointer]:
+          - generic [ref=e499]: keyboard_double_arrow_left
+        - generic [ref=e11]:
+          - heading "1. 目标零部件" [level=2] [ref=e15]
+          - generic [ref=e18] [cursor=pointer]:
+            - checkbox "只显示 MVP 首测场景"
+            - generic [ref=e22]:
+              - paragraph [ref=e24]: 只显示 MVP 首测场景
+              - button "Help for 只显示 MVP 首测场景" [ref=e28]:
+                - img [ref=e29]
+          - generic [ref=e33]:
+            - paragraph [ref=e37]: 应用领域
+            - generic [ref=e39]:
+              - generic [ref=e40]:
+                - generic [ref=e41]: 航空航天与eVTOL飞行器
+                - combobox "Selected 航空航天与eVTOL飞行器. 应用领域" [ref=e43]
+              - img "open" [ref=e45]
+          - generic [ref=e48]:
+            - paragraph [ref=e52]: 核心零部件
+            - generic [ref=e54]:
+              - generic [ref=e55]:
+                - generic [ref=e56]: 机翼主承力翼梁
+                - combobox "Selected 机翼主承力翼梁. 核心零部件" [ref=e58]
+              - img "open" [ref=e60]
+          - paragraph [ref=e66]: 拓扑：I_BEAM
+          - group [ref=e69]:
+            - generic "keyboard_arrow_right 约束摘要" [ref=e70] [cursor=pointer]:
+              - generic [ref=e71]:
+                - generic [ref=e73]: keyboard_arrow_right
+                - paragraph [ref=e76]: 约束摘要
+          - heading "2. 材料体系" [level=2] [ref=e80]
+          - generic [ref=e82]:
+            - paragraph [ref=e86]: 材料模式
+            - radiogroup "材料模式" [ref=e87] [cursor=pointer]:
+              - generic [ref=e88]:
+                - radio "单一均质材料"
+                - paragraph [ref=e93]: 单一均质材料
+              - generic [ref=e94]:
+                - radio "从基准材料库选择" [checked]
+                - paragraph [ref=e99]: 从基准材料库选择
+              - generic [ref=e100]:
+                - radio "复合/杂化材料体系"
+                - paragraph [ref=e105]: 复合/杂化材料体系
+          - generic [ref=e684]:
+            - paragraph [ref=e688]: 基准材料
+            - generic [ref=e690]:
+              - generic [ref=e691]:
+                - generic [ref=e692]: 7075-T6 铝合金
+                - combobox "Selected 7075-T6 铝合金. 基准材料" [expanded] [active] [ref=e694]
+              - img "open" [ref=e696]
+          - group [ref=e700]:
+            - generic "keyboard_arrow_right 属性来源与条件" [ref=e701] [cursor=pointer]:
+              - generic [ref=e702]:
+                - generic [ref=e704]: keyboard_arrow_right
+                - paragraph [ref=e707]: 属性来源与条件
+          - heading "3. 几何参数" [level=2] [ref=e711]
+          - generic [ref=e187]:
+            - paragraph [ref=e191]: 翼梁高度 (mm)
+            - generic [ref=e192]:
+              - slider "翼梁高度 (mm)" [ref=e196]:
+                - generic:
+                  - generic:
+                    - paragraph: "150.00"
+              - generic:
+                - generic:
+                  - paragraph: "50.00"
+                - generic:
+                  - paragraph: "300.00"
+          - generic [ref=e200]:
+            - paragraph [ref=e204]: 翼缘宽度 (mm)
+            - generic [ref=e205]:
+              - slider "翼缘宽度 (mm)" [ref=e209]:
+                - generic:
+                  - generic:
+                    - paragraph: "80.00"
+              - generic:
+                - generic:
+                  - paragraph: "20.00"
+                - generic:
+                  - paragraph: "150.00"
+          - generic [ref=e213]:
+            - paragraph [ref=e217]: 翼梁长度 (mm)
+            - generic [ref=e218]:
+              - slider "翼梁长度 (mm)" [ref=e222]:
+                - generic:
+                  - generic:
+                    - paragraph: "2500.00"
+              - generic:
+                - generic:
+                  - paragraph: "1000.00"
+                - generic:
+                  - paragraph: "5000.00"
+          - generic [ref=e226]:
+            - paragraph [ref=e230]: 平均壁厚 (mm)
+            - generic [ref=e231]:
+              - slider "平均壁厚 (mm)" [ref=e235]:
+                - generic:
+                  - generic:
+                    - paragraph: "5.00"
+              - generic:
+                - generic:
+                  - paragraph: "2.00"
+                - generic:
+                  - paragraph: "15.00"
+          - heading "反向载荷（可选）" [level=3] [ref=e715]
+          - generic [ref=e717]:
+            - generic [ref=e719]:
+              - generic [ref=e721]:
+                - paragraph [ref=e725]: 轴向力
+                - spinbutton "轴向力" [ref=e729]: "0.00"
+              - generic [ref=e731]:
+                - paragraph [ref=e735]: 单位
+                - generic [ref=e737]:
+                  - generic [ref=e738]:
+                    - generic [ref=e739]: "N"
+                    - combobox "Selected N. 单位" [ref=e741]
+                  - img "open" [ref=e743]
+            - generic [ref=e746]:
+              - generic [ref=e748]:
+                - paragraph [ref=e752]: 弯矩
+                - spinbutton "弯矩" [ref=e756]: "0.00"
+              - generic [ref=e758]:
+                - paragraph [ref=e762]: 单位
+                - generic [ref=e764]:
+                  - generic [ref=e765]:
+                    - generic [ref=e766]: N·m
+                    - combobox "Selected N·m. 单位" [ref=e768]
+                  - img "open" [ref=e770]
+          - heading "4. 生成" [level=2] [ref=e775]
+          - generic [ref=e302]:
+            - paragraph [ref=e306]: 证据检索
+            - radiogroup "证据检索" [ref=e307] [cursor=pointer]:
+              - generic [ref=e308]:
+                - radio "BM25 关键词检索" [checked]
+                - paragraph [ref=e313]: BM25 关键词检索
+              - generic [ref=e314]:
+                - radio "BGE-M3 语义检索（可选）"
+                - paragraph [ref=e319]: BGE-M3 语义检索（可选）
+          - generic [ref=e322] [cursor=pointer]:
+            - checkbox "使用 LLM 润色报告（可选）"
+            - generic [ref=e325]:
+              - paragraph [ref=e327]: 使用 LLM 润色报告（可选）
+              - button "Help for 使用 LLM 润色报告（可选）" [ref=e331]:
+                - img [ref=e332]
+          - button "运行内部初筛" [ref=e337] [cursor=pointer]:
+            - paragraph [ref=e341]: 运行内部初筛
+      - generic [ref=e3]:
+        - banner [ref=e344]:
+          - generic [ref=e347]:
+            - button "Deploy" [ref=e349] [cursor=pointer]:
+              - generic [ref=e351]: Deploy
+            - button "Main menu" [ref=e353] [cursor=pointer]:
+              - img [ref=e354]
+        - generic [ref=e357]:
+          - heading "材料可行性评估 MVP" [level=1] [ref=e362]:
+            - text: 材料可行性评估 MVP
+            - generic [ref=e363]:
+              - link "Link to heading":
+                - /url: "#mvp"
+                - img
+          - paragraph [ref=e368]: 面向内部研发的轻量初筛工具：材料参数、零部件模板、内部资料证据和确定性计算先跑通。
+          - heading "当前评估对象" [level=3] [ref=e373]:
+            - text: 当前评估对象
+            - generic [ref=e374]:
+              - link "Link to heading":
+                - /url: "#4ab266c3"
+                - img
+          - generic [ref=e376]:
+            - generic [ref=e381]:
+              - paragraph [ref=e384]: 材料
+              - paragraph [ref=e387]: 7075-T6 铝合金
+            - generic [ref=e392]:
+              - paragraph [ref=e395]: 密度
+              - paragraph [ref=e398]: 2.81 g/cm³
+            - generic [ref=e403]:
+              - paragraph [ref=e406]: 抗拉强度
+              - paragraph [ref=e409]: 570 MPa
+            - generic [ref=e414]:
+              - paragraph [ref=e417]: 弹性模量
+              - paragraph [ref=e420]: 71.7 GPa
+          - paragraph [ref=e776]: ✅ 已声明适用域 · ✅ 三点区间数据
+          - separator [ref=e781]
+          - heading "最近评估记录" [level=3] [ref=e786]:
+            - text: 最近评估记录
+            - generic [ref=e787]:
+              - link "Link to heading":
+                - /url: "#38c74a0d"
+                - img
+          - generic [ref=e792]:
+            - button "Show/hide columns" [ref=e796] [cursor=pointer]:
+              - img [ref=e797]
+            - button "Download as CSV" [ref=e802] [cursor=pointer]:
+              - img [ref=e803]
+            - button "Search" [ref=e808] [cursor=pointer]:
+              - img [ref=e809]
+            - button "Fullscreen" [ref=e814] [cursor=pointer]:
+              - img [ref=e815]
+          - heading "检索评估" [level=3] [ref=e830]:
+            - text: 检索评估
+            - generic [ref=e831]:
+              - link "Link to heading":
+                - /url: "#297d657"
+                - img
+          - button "运行默认检索评估" [ref=e834] [cursor=pointer]:
+            - paragraph [ref=e838]: 运行默认检索评估
+          - paragraph [ref=e843]: 使用固定问题集检查证据召回命中率和检索方法分布。
+          - alert [ref=e846]:
+            - paragraph [ref=e851]: 选择左侧配置后点击“运行内部初筛”。
+    - list [ref=e855]:
+      - generic [ref=e857]:
+        - option "7075-T6 铝合金" [selected] [ref=e858] [cursor=pointer]:
+          - generic [ref=e862]: 7075-T6 铝合金
+        - option "碳纤维/环氧准各向同性层合板" [ref=e863] [cursor=pointer]:
+          - generic [ref=e867]: 碳纤维/环氧准各向同性层合板
+        - option "玻璃纤维/环氧层合板" [ref=e868] [cursor=pointer]:
+          - generic [ref=e872]: 玻璃纤维/环氧层合板
+        - option "Kevlar 芳纶纤维" [ref=e873] [cursor=pointer]:
+          - generic [ref=e877]: Kevlar 芳纶纤维
+        - option "AZ31B 镁合金" [ref=e878] [cursor=pointer]:
+          - generic [ref=e882]: AZ31B 镁合金
+        - option "PA66-GF30 玻纤增强尼龙" [ref=e883] [cursor=pointer]:
+          - generic [ref=e887]: PA66-GF30 玻纤增强尼龙
+        - option "30% 碳纤维增强 PEEK" [ref=e888] [cursor=pointer]:
+          - generic [ref=e892]: 30% 碳纤维增强 PEEK
+        - option "PEEK 未增强" [ref=e893] [cursor=pointer]:
+          - generic [ref=e897]: PEEK 未增强
+        - option "316L 不锈钢" [ref=e898] [cursor=pointer]:
+          - generic [ref=e902]: 316L 不锈钢
+        - option "T1000 碳纤维单向带" [ref=e903] [cursor=pointer]:
+          - generic [ref=e907]: T1000 碳纤维单向带
+  - img [ref=e668]

@@ -147,6 +147,7 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
         evidence_cards=evidence_cards,
         envelope_report=passed_envelope_report,
         condition=condition,
+        safety_report=safety_report,
     )
     return EvaluationDraft(
         material=request.material,
