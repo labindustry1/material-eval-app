@@ -6,3 +6,7 @@ __pycache__/
 data/artifacts/
 data/*.sqlite3
 *.log
+
+# Playwright MCP temp files
+.playwright-mcp/
+*.png
