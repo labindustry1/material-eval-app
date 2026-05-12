@@ -83,6 +83,11 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
         request.evidence_query or _default_evidence_query(request),
         retrieval_mode=request.retrieval_mode,
     )
+    # If an envelope was provided and passed, include its report in the draft
+    # so the 工况包络校验 section appears in the report markdown.
+    passed_envelope_report = None
+    if request.material_envelope is not None:
+        passed_envelope_report = request.material_envelope.check(condition)
     report = build_internal_report(
         material=request.material,
         part=request.part,
@@ -90,6 +95,8 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
         calculation=calculation,
         laminate_result=laminate_result,
         evidence_cards=evidence_cards,
+        envelope_report=passed_envelope_report,
+        condition=condition,
     )
     return EvaluationDraft(
         material=request.material,
