@@ -54,7 +54,7 @@ def run_app() -> None:
     run_id = save_evaluation(draft, report_markdown=report_markdown)
     report_path = write_markdown_report(filename=f"{run_id}-{draft.report.filename}", markdown=report_markdown)
 
-    tab_calc, tab_evidence, tab_report, tab_history, tab_eval = st.tabs(["工程初筛", "证据卡", "中文报告", "评估记录", "检索评估"])
+    tab_calc, tab_evidence, tab_report, tab_history, tab_eval, tab_safety = st.tabs(["工程初筛", "证据卡", "中文报告", "评估记录", "检索评估", "安全性评估"])
     with tab_calc:
         st.success(f"评估已保存，Run ID: {run_id}")
         render_calculation(draft.calculation)
@@ -67,6 +67,8 @@ def run_app() -> None:
         render_recent_runs()
     with tab_eval:
         render_rag_evaluation_panel()
+    with tab_safety:
+        render_safety_report(draft.safety_report)
 
 
 def require_optional_access_code() -> None:
@@ -122,6 +124,7 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool, str
 
         material, laminate_stack, material_id_chosen = render_material_form()
         dimensions = render_dimension_form(part)
+        axial_force, bending_moment = render_load_inputs()
 
         st.header("4. 生成")
         retrieval_label = st.radio(
@@ -135,11 +138,21 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool, str
         use_openai = st.checkbox("使用 OpenAI 润色报告（可选）", value=False)
         run_button = st.button("运行内部初筛", type="primary", width="stretch")
 
-    # 若用户从材料库选了具体 ID，则注入 envelope；自由输入时为 None
+    # 若用户从材料库选了具体 ID，则注入 envelope 和 strength_allowables；自由输入时为 None
     material_envelope = None
+    allowables = None
     if material_id_chosen is not None:
         library = load_material_library()
         material_envelope = library.envelope_for(material_id_chosen)
+        allowables = library.allowables_for(material_id_chosen)
+
+    # 构造包含反向载荷的 Condition（如果用户输入了轴向力或弯矩）
+    from material_eval.conditions import Condition
+    condition = Condition.from_dimensions(
+        dimensions,
+        **({} if axial_force is None else {"axial_force": axial_force}),
+        **({} if bending_moment is None else {"bending_moment": bending_moment}),
+    )
 
     return (
         EvaluationRequest(
@@ -149,6 +162,9 @@ def render_sidebar(catalog: Catalog) -> tuple[EvaluationRequest, bool, bool, str
             retrieval_mode=retrieval_mode,
             laminate_stack=laminate_stack,
             material_envelope=material_envelope,
+            condition=condition,
+            strength_allowables=allowables,
+            material_id=material_id_chosen,
         ),
         use_openai,
         run_button,
@@ -284,6 +300,30 @@ def render_dimension_form(part) -> dict[str, float]:
         item.key: st.slider(item.label, item.minimum, item.maximum, item.default)
         for item in part.geometry_inputs
     }
+
+
+def render_load_inputs() -> tuple["Quantity | None", "Quantity | None"]:
+    """Render axial force and bending moment inputs; return (axial_force, bending_moment) Quantities."""
+    from material_eval.conditions import Quantity
+
+    st.subheader("反向载荷（可选）")
+    col_f, col_m = st.columns(2)
+    with col_f:
+        axial_val = st.number_input("轴向力", value=0.0, step=1.0, key="axial_force_val")
+        axial_unit = st.selectbox("单位", ["N", "kN"], key="axial_force_unit")
+    with col_m:
+        moment_val = st.number_input("弯矩", value=0.0, step=1.0, key="bending_moment_val")
+        moment_unit = st.selectbox("单位", ["N·m", "kN·m"], key="bending_moment_unit")
+
+    axial_force = Quantity(value=axial_val, unit=axial_unit) if axial_val != 0.0 else None
+    # UI shows "N·m"/"kN·m" but Pint needs "N*m"/"kN*m"
+    _moment_unit_map = {"N·m": "N*m", "kN·m": "kN*m"}
+    bending_moment = (
+        Quantity(value=moment_val, unit=_moment_unit_map.get(moment_unit, moment_unit))
+        if moment_val != 0.0
+        else None
+    )
+    return axial_force, bending_moment
 
 
 def render_material_summary(material: MaterialCandidate, *, material_id: str | None = None) -> None:
@@ -439,3 +479,35 @@ def render_rag_evaluation_panel() -> None:
         for item in result.items
     ]
     st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+
+def render_safety_report(safety_report) -> None:
+    if safety_report is None:
+        st.info("未启用失效分析：材料未声明 strength_allowables（核心材料：Ti-6Al-4V / PA66-GF30 / Carbon-Epoxy 准各向同性），或工况未输入轴向力/弯矩。")
+        return
+
+    method_label = {"von_mises": "von Mises 屈服", "tsai_wu": "Tsai-Wu 复合材料"}.get(safety_report.method, safety_report.method)
+    st.subheader(f"安全性评估（{method_label}）")
+
+    status = safety_report.status
+    sf_iv = safety_report.governing.value
+
+    if status == "pass":
+        st.success(f"✓ pass — 控制层 {safety_report.governing.location}，SF.low = {sf_iv.low:.2f}")
+    elif status == "marginal":
+        st.warning(f"⚠ marginal — 控制层 {safety_report.governing.location}，SF.low = {sf_iv.low:.2f}（区间下界余量不足 1.5，建议补数据或加保险）")
+    else:
+        st.error(f"✗ fail — 控制层 {safety_report.governing.location}，SF.typical = {sf_iv.typical:.2f} < 1.0（典型工况下不通过）")
+
+    rows = []
+    for f in safety_report.factors:
+        rows.append({
+            "评估位置": f.location,
+            "安全系数 (low / typical / high)": f.value.format(),
+            "主导模式": f.dominant_mode,
+        })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+    if safety_report.method == "tsai_wu":
+        st.caption("*Tsai-Wu F12 耦合系数 f12_star 采用 seed 中指定值（默认 0 = Tsai-Hill 退化，工程默认）；待业务专家用真实实验数据校准。*")
