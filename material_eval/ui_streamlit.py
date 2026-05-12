@@ -7,6 +7,7 @@ import plotly.express as px
 import streamlit as st
 
 from material_eval.artifacts import write_markdown_report
+from material_eval.blueprint_3d import render_3d_blueprint
 from material_eval.catalog import Catalog
 from material_eval.evaluation import EnvelopeRefusal, EvaluationRequest, run_evaluation, save_evaluation
 from material_eval.laminates import Lamina, LaminateStack
@@ -43,7 +44,7 @@ def run_app() -> None:
 
     result = run_evaluation(request)
     if isinstance(result, EnvelopeRefusal):
-        st.error("⛔ 本次评估未出具数值结论：工况输入超出材料适用域")
+        render_refusal_summary(result)
         st.markdown(result.refusal_markdown)
         try:
             append_refusal_log(result)
@@ -55,8 +56,14 @@ def run_app() -> None:
     run_id = save_evaluation(draft, report_markdown=report_markdown)
     report_path = write_markdown_report(filename=f"{run_id}-{draft.report.filename}", markdown=report_markdown)
 
+    # 顶部一眼看结论面板（评估总览）
+    render_evaluation_summary(draft, run_id=run_id)
+    st.divider()
+
     tab_calc, tab_evidence, tab_report, tab_history, tab_eval, tab_safety = st.tabs(["工程初筛", "证据卡", "中文报告", "评估记录", "检索评估", "安全性评估"])
     with tab_calc:
+        # 3D 蓝图：宏观几何 + 应力示意双视图
+        render_blueprint_section(request.part.topology, request.dimensions)
         st.success(f"评估已保存，Run ID: {run_id}")
         render_calculation(draft.calculation)
         render_laminate_result(draft.laminate_result)
@@ -533,3 +540,86 @@ def render_safety_report(safety_report) -> None:
 
     if safety_report.method == "tsai_wu":
         st.caption("*Tsai-Wu F12 耦合系数 f12_star 采用 seed 中指定值（默认 0 = Tsai-Hill 退化，工程默认）；待业务专家用真实实验数据校准。*")
+
+
+# ---------------------------------------------------------------------------
+# 顶部"评估总览"面板 + 3D 蓝图（Phase 2.5 retro: legacy 视觉感回归）
+# ---------------------------------------------------------------------------
+
+def render_evaluation_summary(draft, *, run_id: int) -> None:
+    """一眼看结论的顶部面板。汇总 SF 状态、控制点、关键风险。"""
+    material_name = draft.material.name
+    part_name = draft.part.name
+    domain = draft.part.domain
+
+    # 状态结论
+    safety = draft.safety_report
+    if safety is None:
+        status = "info"
+        status_text = "ℹ️ 未启用失效分析"
+        sf_text = "—"
+        location_text = "—"
+        mode_text = "—"
+        method_text = "—"
+    else:
+        s = safety.status
+        if s == "pass":
+            status, status_text = "success", "🟢 PASS — 满足设计安全余量"
+        elif s == "marginal":
+            status, status_text = "warning", "🟡 MARGINAL — 区间下界余量不足，建议补数据/做实验"
+        else:
+            status, status_text = "error", "🔴 FAIL — 典型工况下不通过，需换材料或改设计"
+        sf_text = safety.governing.value.format()
+        location_text = safety.governing.location
+        mode_text = safety.governing.dominant_mode
+        method_text = {"von_mises": "von Mises 屈服（金属/塑料）", "tsai_wu": "Tsai-Wu 复合材料失效"}.get(safety.method, safety.method)
+
+    # 顶部 banner
+    {"success": st.success, "warning": st.warning, "error": st.error, "info": st.info}[status](
+        f"### {status_text}\n\n**评估对象**：{material_name} 用于 {domain} / {part_name}　·　Run #{run_id}"
+    )
+
+    # 5 个关键指标卡片
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("安全系数（low / typ / high）", sf_text)
+    c2.metric("控制位置", location_text)
+    c3.metric("失效模式", mode_text)
+    c4.metric("评估方法", method_text, help="von Mises 用于金属/塑料；Tsai-Wu 用于复合材料")
+    c5.metric("拓扑", draft.part.topology)
+
+    # 工况包络一行汇总
+    env = draft.envelope_report if hasattr(draft, "envelope_report") else None
+    if env is not None:
+        if env.violations:
+            st.warning(f"⚠️ 工况包络越界 {len(env.violations)} 项")
+        elif env.has_declared_envelope:
+            st.caption("✅ 工况在材料适用域内")
+        else:
+            st.caption("⚠️ 该材料未声明工况适用域")
+
+
+def render_refusal_summary(refusal) -> None:
+    """Refusal 路径的红底大字总结。"""
+    material_name = refusal.material.name
+    part_name = refusal.part.name
+    violations = refusal.envelope_report.violations
+    st.error(
+        f"### ⛔ REFUSAL — 未出具评估\n\n"
+        f"**{material_name}** 用于 **{part_name}** 时，工况输入超出材料适用域：\n\n"
+        + "\n".join(
+            f"- **{v.axis}** = {v.input_value} 超出允许范围 [{v.allowed_range[0]}, {v.allowed_range[1]}]"
+            for v in violations
+        )
+        + "\n\n→ 详细建议（替代材料 / 补数据）见下方报告。"
+    )
+
+
+def render_blueprint_section(topology: str, dims: dict[str, float]) -> None:
+    """工程初筛 tab 顶部的 3D 蓝图双视图（宏观几何 + 应力示意）。"""
+    with st.expander("📐 3D 结构蓝图 · 应力示意", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(render_3d_blueprint(topology, dims, "macro"), use_container_width=True)
+        with col2:
+            st.plotly_chart(render_3d_blueprint(topology, dims, "micro"), use_container_width=True)
+        st.caption("*左：宏观几何示意；右：应力定性分布示意（非真实 CAE 仿真）。视觉用于工程直觉，数值结论以下方表格为准。*")
