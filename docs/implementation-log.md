@@ -120,22 +120,62 @@
   - 合规/准入风险
 - 当前评分是 MVP 规则模型，目的是解释和排序，不是认证结论；后续需要材料、结构、法规负责人共同校准权重和阈值。
 
+### 10. Phase 1 可信数字基础设施（2026-05-12）
+
+设计：`docs/superpowers/specs/2026-05-12-phase1-trustworthy-numbers-design.md`
+实现 plan：`docs/superpowers/plans/2026-05-12-phase1-trustworthy-numbers.md`
+分支：`feature/phase1-trustworthy-numbers`（18 个 commit，全套 TDD）
+
+完成内容：
+
+- 新增 `material_eval/uncertainty.py`：三点区间值对象 `Interval`（含 `__add/__sub/__mul/__truediv/__pow__` 区间算术、端点穷举、零穿越除法拒绝、混合符号偶数次幂归零修复）；异常类 `IntervalError`/`NegativeWidthError`/`UnitMismatchError`；常量 `CONFIDENCE_SPREAD`；适用域校验值对象 `EnvelopeSpec` / `EnvelopeReport` / `Violation` 覆盖 6 轴（temperature_C/humidity_pct/stress_MPa/strain_rate_1_per_s/fatigue_cycles/thickness_mm）。
+- 新增 `material_eval/conditions.py`：`Quantity` / `Condition` Pydantic v2 模型，单位归一化统一入口，`envelope_axes()` 直接对接 `EnvelopeSpec.check()`。
+- 扩展 `material_eval/units.py`：`normalize_quantity()` 入口覆盖长度/力/力矩/应力/温度/湿度/应变率。
+- 升级 `material_property_library.py`：
+  - `_build_observation` 同时解析单点 `"value": 1.8` 和三点 `"value": {"low":..., "typical":..., "high":...}`。
+  - 单点经 confidence 自动展开（high=±5%, medium=±15%, low=±30%）。
+  - 多观察聚合：low=min, high=max, typical=highest-confidence。
+  - 新增 `property_interval()` / `envelope_for()` API。
+- 升级 `materials.py`：`MaterialCandidate` 三个属性字段 `float → Interval`，`specific_strength/modulus` 重命名为 `_typical` 系列。
+- 升级 `computation.py` / `section_analysis.py` / `laminates.py`：5 个 `_calculate_*` 函数全部用区间算术；`Metric.value` 和 `SectionProperties` 字段升级为 Interval；`LaminateResult` 字段类型对齐 Interval（Phase 1 输出零宽，Phase 2 失效准则会赋予真实区间）。
+- 升级 `scoring.py`：新增 `score_data_confidence(intervals)` 用相对宽度驱动数据可信度；`score_condition_risk(envelope, condition)` 用 envelope 余量驱动工况风险。
+- 升级 `report_schema.py`：新增 `IntervalPayload` / `ViolationPayload` / `EnvelopeReportPayload`，扩展 `ClaimBinding` 和 `StructuredReport`。
+- 升级 `evaluation.py`：`EvaluationRequest` 新增 `condition` / `material_envelope` 两个可选字段，`run_evaluation` 短路返回 `EnvelopeRefusal`（材料适用域越界时不出数）。
+- 升级 `reporting.py`：所有指标渲染从 `value.typical:.4g` 切换到 `value.format()`（三档精度自动）；Markdown 新增 "工况包络校验" 章节（列出每条轴 ✓/✗）和 "不确定度说明" 静态文案；新增 `build_refusal_report()` 输出独立的拒绝报告 markdown。
+- 升级 `storage.py`：新增 `append_refusal_log()` 写 `data/refusal_log.jsonl`（refusal 不污染主 evaluation_runs 表）。
+- 升级 `ui_streamlit.py`：`run_app()` 处理 `EnvelopeRefusal` 路径（红底 banner + refusal markdown + 不展示任何图表/评分）；`render_material_summary` 显示材料的"适用域声明状态"和"区间数据状态"徽标；`render_sidebar` 自动注入材料 envelope 到 EvaluationRequest。
+- 升级 5 核心材料 seed（`aluminum_7075_t6` / `ti_6al_4v` / `peek_cf30` / `pa66_gf30` / `kevlar_aramid_fiber`）：每个材料 3 条核心属性观察从单点改三点（±5% 或 ±10% 按 confidence）；每个材料加 `envelope`（temperature/humidity/stress/thickness 4 轴，源标注"engineering default, needs supplier confirmation"）；其他 7 个材料保持单点占位。
+- 新增 `tests/test_phase1_smoke.py`：MVP 3 真实场景 × in/out-of-envelope 端到端 6 个 case 全绿。
+
+**测试基线**：155 unittest 全绿（原 50 + 新增 105）。验收命令：
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+.venv/bin/python -m compileall material_eval app.py tests
+```
+
 ## 新发现
 
-- 材料属性不能只存一个数字。不同牌号、工艺、方向、温湿度会导致巨大差异，因此 seed 数据必须标注为“典型工程参考/需复核”，不能包装成已认证事实。
+- 材料属性不能只存一个数字。不同牌号、工艺、方向、温湿度会导致巨大差异，因此 seed 数据必须标注为"典型工程参考/需复核"，不能包装成已认证事实。
 - 当前知识库只有 4 个内部种子文档，RAG 默认问题集能命中，但数据量远低于 PRD 里提到的 50 条证据卡目标。
 - 当前 CLT 已可用于铺层初筛，但还没有失效准则，如 Tsai-Hill/Tsai-Wu/Hashin。
-- 当前报告已经进入 claim 级引用绑定第一版，但绑定粒度仍偏粗，后续要把“具体句子/具体证据片段/具体计算变量”绑定得更细。
-- 单位系统已经覆盖核心三类物性，但几何尺寸、载荷、温湿度、疲劳/冲击等工况变量还需要继续结构化。
+- 当前报告已经进入 claim 级引用绑定第一版，但绑定粒度仍偏粗，后续要把"具体句子/具体证据片段/具体计算变量"绑定得更细。
+- Phase 1 新发现：
+  - 区间宽度对评分影响显著。`CONFIDENCE_SPREAD = (0.7→5%, 0.5→15%, 0→30%)` 是工程默认占位，**需要业务专家用真实实验数据校准**——否则"数据可信度"分数会受这个常量主导。
+  - 越界硬拒绝（refusal 路径）在 6 个 smoke case 上行为良好。但 refusal 当前只列违规轴；plan 中的"建议替代材料 / 缺失数据清单"两个建设性出口还没填充，后续按真实评估积累 refusal_log 后补。
+  - 5 核心材料的 envelope 全部标 `source = "engineering default, needs supplier confirmation"`——MVP 上线前业务方必须复核。
+  - `LaminateResult` 字段虽然类型升级为 `Interval`，但因 Lamina 输入是 float，所有铺层结果当前都是零宽区间。Phase 2 引入失效准则时才会获得真实区间。
+- 单位系统已经覆盖几何/载荷/温度/湿度/应变率（Phase 1 完成），但疲劳/冲击工况仍未纳入。
 - 透明评分卡已经可读，但评分权重仍是工程默认值，需要业务专家用历史项目和真实实验结果校准。
 
-## 下一步
+## 下一步（Phase 2 候选）
 
-1. 把 claim binding 从粗粒度来源升级为句子级/证据片段级/计算变量级。
-2. 扩充知识库和材料属性库，逐步把 seed 替换为内部实验/供应商/标准来源。
-3. 把几何尺寸、载荷、温度、湿度、疲劳/冲击等工况输入纳入单位/边界校验。
-4. 增加复合材料失效准则，如 Tsai-Hill/Tsai-Wu/Hashin。
-5. 用真实项目/实验结果校准透明评分卡的权重、阈值和解释文案。
+1. **复合材料失效准则**：Tsai-Hill / Tsai-Wu / Hashin。依赖 Phase 1 已就绪的 Interval 和 envelope。
+2. **Claim binding 细化**：从粗粒度来源升级到句子级/证据片段级/计算变量级。
+3. **`CONFIDENCE_SPREAD` 校准**：用真实实验/历史项目数据校准三档百分比。
+4. **Refusal 建设性出口**：填充 `suggested_alternatives` 和 `missing_data_hints`，让用户被拒后知道下一步怎么走。
+5. **扩充知识库和材料属性库**：把 seed 占位逐步替换为内部实验/供应商/标准来源数据。
+6. **疲劳/冲击工况**：纳入单位系统和 envelope。
+7. **评分卡权重校准**：用历史项目和真实实验结果校准 scorecard 各维度权重和阈值。
 
 ## 交接验证命令
 
