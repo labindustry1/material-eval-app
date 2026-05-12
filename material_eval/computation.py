@@ -61,11 +61,11 @@ def calculate_part(part: PartTemplate, material: MaterialCandidate, dims: dict[s
 
 
 def _density_kg_per_mm3(material: MaterialCandidate) -> float:
-    return material.density_g_cm3 * 1e-6
+    return material.density_g_cm3.typical * 1e-6
 
 
 def _elastic_modulus_mpa(material: MaterialCandidate) -> float:
-    return material.elastic_modulus_gpa * 1000.0
+    return material.elastic_modulus_gpa.typical * 1000.0
 
 
 def _base_assumptions() -> tuple[str, ...]:
@@ -95,11 +95,11 @@ def _calculate_beam(material: MaterialCandidate, dims: dict[str, float]) -> Calc
     inertia = section.inertia_x_mm4
     area = section.area_mm2
     weight = volume * _density_kg_per_mm3(material)
-    bending_load = (material.tensile_strength_mpa * inertia / (diameter / 2)) / length if length > 0 else 0
-    axial_load = material.tensile_strength_mpa * area * 0.8
+    bending_load = (material.tensile_strength_mpa.typical * inertia / (diameter / 2)) / length if length > 0 else 0
+    axial_load = material.tensile_strength_mpa.typical * area * 0.8
     deflection = (
         bending_load * length**3 / (3 * _elastic_modulus_mpa(material) * inertia)
-        if inertia > 0 and material.elastic_modulus_gpa > 0
+        if inertia > 0 and material.elastic_modulus_gpa.typical > 0
         else 0
     )
 
@@ -137,11 +137,11 @@ def _calculate_i_beam(material: MaterialCandidate, dims: dict[str, float]) -> Ca
     volume = area * length
     inertia = section.inertia_x_mm4
     weight = volume * _density_kg_per_mm3(material)
-    bending_load = (material.tensile_strength_mpa * inertia / (height / 2)) / length if length > 0 else 0
-    shear_load = material.tensile_strength_mpa * 0.5 * inner_height * thickness
+    bending_load = (material.tensile_strength_mpa.typical * inertia / (height / 2)) / length if length > 0 else 0
+    shear_load = material.tensile_strength_mpa.typical * 0.5 * inner_height * thickness
     deflection = (
         bending_load * length**3 / (3 * _elastic_modulus_mpa(material) * inertia)
-        if inertia > 0 and material.elastic_modulus_gpa > 0
+        if inertia > 0 and material.elastic_modulus_gpa.typical > 0
         else 0
     )
     return CalculationResult(
@@ -166,12 +166,12 @@ def _calculate_plate(material: MaterialCandidate, dims: dict[str, float]) -> Cal
     section = analyze_rectangular_section(width=width, depth=thickness)
     volume = length * section.area_mm2
     weight = volume * _density_kg_per_mm3(material)
-    punch_load = 4 * material.tensile_strength_mpa * (thickness**2) / length if length > 0 else 0
-    shear_load = material.tensile_strength_mpa * 0.577 * width * thickness
+    punch_load = 4 * material.tensile_strength_mpa.typical * (thickness**2) / length if length > 0 else 0
+    shear_load = material.tensile_strength_mpa.typical * 0.577 * width * thickness
     inertia = section.inertia_x_mm4
     deflection = (
         punch_load * length**3 / (48 * _elastic_modulus_mpa(material) * inertia)
-        if inertia > 0 and material.elastic_modulus_gpa > 0
+        if inertia > 0 and material.elastic_modulus_gpa.typical > 0
         else 0
     )
     return CalculationResult(
@@ -197,11 +197,11 @@ def _calculate_corrugated(material: MaterialCandidate, dims: dict[str, float]) -
     weight = volume * _density_kg_per_mm3(material)
     inertia_equivalent = width * (thickness * 3) ** 3 / 12
     bending_load = (
-        material.tensile_strength_mpa * inertia_equivalent / (thickness * 1.5) / length
+        material.tensile_strength_mpa.typical * inertia_equivalent / (thickness * 1.5) / length
         if length > 0 and thickness > 0
         else 0
     )
-    crush_energy = material.tensile_strength_mpa * volume * 0.4 / 1000
+    crush_energy = material.tensile_strength_mpa.typical * volume * 0.4 / 1000
     return CalculationResult(
         topology="CORRUGATED",
         metrics=(
@@ -224,10 +224,10 @@ def _calculate_strap(material: MaterialCandidate, dims: dict[str, float]) -> Cal
     area = section.area_mm2
     volume = ref_length * area
     weight = volume * _density_kg_per_mm3(material)
-    tensile_load = material.tensile_strength_mpa * area
+    tensile_load = material.tensile_strength_mpa.typical * area
     elongation = (
         tensile_load * ref_length / (_elastic_modulus_mpa(material) * area)
-        if area > 0 and material.elastic_modulus_gpa > 0
+        if area > 0 and material.elastic_modulus_gpa.typical > 0
         else 0
     )
     return CalculationResult(

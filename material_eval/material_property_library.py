@@ -95,9 +95,9 @@ class MaterialPropertyLibrary:
         return MaterialCandidate(
             name=material.name,
             category=material.category,
-            density_g_cm3=density.canonical_value,
-            tensile_strength_mpa=strength.canonical_value,
-            elastic_modulus_gpa=modulus.canonical_value,
+            density_g_cm3=density.interval,
+            tensile_strength_mpa=strength.interval,
+            elastic_modulus_gpa=modulus.interval,
             notes=(
                 f"来自材料属性库 {self.version}；属性为典型工程参考值，需按供应商/实验/标准复核。"
                 f" 来源：{density.source_label}；{strength.source_label}；{modulus.source_label}。"

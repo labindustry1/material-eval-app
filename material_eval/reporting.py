@@ -90,11 +90,11 @@ def build_internal_report(
 
 - 材料名称：{material.name}
 - 材料类别：{material.category}
-- 密度：{material.density_g_cm3:.4g} g/cm³
-- 抗拉强度：{material.tensile_strength_mpa:.4g} MPa
-- 弹性模量：{material.elastic_modulus_gpa:.4g} GPa
-- 比强度：{material.specific_strength:.4g}
-- 比模量：{material.specific_modulus:.4g}
+- 密度：{material.density_g_cm3.typical:.4g} g/cm³
+- 抗拉强度：{material.tensile_strength_mpa.typical:.4g} MPa
+- 弹性模量：{material.elastic_modulus_gpa.typical:.4g} GPa
+- 比强度：{material.specific_strength_typical:.4g}
+- 比模量：{material.specific_modulus_typical:.4g}
 - 备注：{material.notes or "无"}
 
 ## 3. 目标零部件与工况
@@ -146,7 +146,14 @@ def build_internal_report(
     report_json = {
         "title": title,
         "created_at": now,
-        "material": material.__dict__,
+        "material": {
+            "name": material.name,
+            "category": material.category,
+            "density_g_cm3": material.density_g_cm3.typical,
+            "tensile_strength_mpa": material.tensile_strength_mpa.typical,
+            "elastic_modulus_gpa": material.elastic_modulus_gpa.typical,
+            "notes": material.notes,
+        },
         "part": {
             "domain": part.domain,
             "name": part.name,

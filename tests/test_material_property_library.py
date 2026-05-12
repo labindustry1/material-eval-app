@@ -27,9 +27,9 @@ class MaterialPropertyLibraryTest(unittest.TestCase):
         candidate = self.library.build_candidate("t1000_carbon_fiber_ud")
 
         self.assertEqual(candidate.name, "T1000 碳纤维单向带")
-        self.assertGreater(candidate.density_g_cm3, 1.0)
-        self.assertGreater(candidate.tensile_strength_mpa, 4000)
-        self.assertGreater(candidate.elastic_modulus_gpa, 200)
+        self.assertGreater(candidate.density_g_cm3.typical, 1.0)
+        self.assertGreater(candidate.tensile_strength_mpa.typical, 4000)
+        self.assertGreater(candidate.elastic_modulus_gpa.typical, 200)
         self.assertIn("材料属性库", candidate.notes)
 
     def test_detects_property_conflicts(self):
@@ -62,9 +62,9 @@ class MaterialPropertyLibraryTest(unittest.TestCase):
 
             candidate = MaterialPropertyLibrary(seed_path).build_candidate("mixed_units")
 
-        self.assertAlmostEqual(candidate.density_g_cm3, 1.8, places=6)
-        self.assertAlmostEqual(candidate.tensile_strength_mpa, 6370, places=6)
-        self.assertAlmostEqual(candidate.elastic_modulus_gpa, 294, places=6)
+        self.assertAlmostEqual(candidate.density_g_cm3.typical, 1.8, places=6)
+        self.assertAlmostEqual(candidate.tensile_strength_mpa.typical, 6370, places=6)
+        self.assertAlmostEqual(candidate.elastic_modulus_gpa.typical, 294, places=6)
 
 
 SAMPLE_SEED = {

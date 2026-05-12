@@ -268,9 +268,9 @@ def render_material_summary(material: MaterialCandidate) -> None:
     st.subheader("当前评估对象")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("材料", material.name)
-    c2.metric("密度", f"{material.density_g_cm3:.3g} g/cm³")
-    c3.metric("抗拉强度", f"{material.tensile_strength_mpa:.4g} MPa")
-    c4.metric("弹性模量", f"{material.elastic_modulus_gpa:.4g} GPa")
+    c2.metric("密度", f"{material.density_g_cm3.typical:.3g} g/cm³")
+    c3.metric("抗拉强度", f"{material.tensile_strength_mpa.typical:.4g} MPa")
+    c4.metric("弹性模量", f"{material.elastic_modulus_gpa.typical:.4g} GPa")
 
 
 def maybe_polish_report(markdown: str, *, use_openai: bool) -> str:

@@ -50,7 +50,7 @@ def build_scorecard(
             "本征性能潜力",
             _intrinsic_performance_score(material),
             0.20,
-            f"比强度 {material.specific_strength:.4g}，比模量 {material.specific_modulus:.4g}。",
+            f"比强度 {material.specific_strength_typical:.4g}，比模量 {material.specific_modulus_typical:.4g}。",
         ),
         _dimension(
             "structural_fit",
@@ -111,9 +111,9 @@ def _data_confidence_score(evidence_cards: list[EvidenceCard], material: Materia
 
 
 def _intrinsic_performance_score(material: MaterialCandidate) -> float:
-    strength_component = min(material.specific_strength / 3500, 1.0) * 55
-    modulus_component = min(material.specific_modulus / 120, 1.0) * 35
-    density_bonus = 10 if material.density_g_cm3 <= 1.6 else 0
+    strength_component = min(material.specific_strength_typical / 3500, 1.0) * 55
+    modulus_component = min(material.specific_modulus_typical / 120, 1.0) * 35
+    density_bonus = 10 if material.density_g_cm3.typical <= 1.6 else 0
     return strength_component + modulus_component + density_bonus
 
 
