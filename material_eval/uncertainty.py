@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
-from typing import Iterable
 
 
 class IntervalError(ValueError):
@@ -151,61 +149,3 @@ def _fmt_num(x: float) -> str:
         return f"{x:.3g}"
     return f"{x:.2e}"
 
-
-_ENVELOPE_AXES: tuple[str, ...] = (
-    "temperature_C",
-    "humidity_pct",
-    "stress_MPa",
-    "strain_rate_1_per_s",
-    "fatigue_cycles",
-    "thickness_mm",
-)
-
-
-@dataclass(frozen=True)
-class Violation:
-    axis: str
-    input_value: float
-    allowed_range: tuple[float, float]
-    source: str | None = None
-
-
-@dataclass(frozen=True)
-class EnvelopeReport:
-    violations: tuple[Violation, ...]
-    has_declared_envelope: bool
-
-    @property
-    def passed(self) -> bool:
-        return not self.violations
-
-
-@dataclass(frozen=True)
-class EnvelopeSpec:
-    temperature_C: tuple[float, float] | None = None
-    humidity_pct: tuple[float, float] | None = None
-    stress_MPa: tuple[float, float] | None = None
-    strain_rate_1_per_s: tuple[float, float] | None = None
-    fatigue_cycles: tuple[float, float] | None = None
-    thickness_mm: tuple[float, float] | None = None
-    source: str | None = None
-
-    def has_any_axis(self) -> bool:
-        return any(getattr(self, axis) is not None for axis in _ENVELOPE_AXES)
-
-    def check(self, condition) -> EnvelopeReport:
-        violations: list[Violation] = []
-        inputs = condition.envelope_axes()
-        for axis in _ENVELOPE_AXES:
-            allowed: tuple[float, float] | None = getattr(self, axis)
-            if allowed is None:
-                continue
-            actual = inputs.get(axis)
-            if actual is None:
-                continue
-            lo, hi = allowed
-            if actual < lo or actual > hi:
-                violations.append(
-                    Violation(axis=axis, input_value=float(actual), allowed_range=(lo, hi), source=self.source)
-                )
-        return EnvelopeReport(violations=tuple(violations), has_declared_envelope=self.has_any_axis())
