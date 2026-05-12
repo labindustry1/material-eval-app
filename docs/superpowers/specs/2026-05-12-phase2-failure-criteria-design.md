@@ -31,7 +31,7 @@
 | 失效覆盖材料类型 | 复合材料（Tsai-Wu）+ 各向同性金属/塑料（von Mises） | MVP 3 场景全覆盖（Ti-6Al-4V / PA66-GF30 / Kevlar）；Hashin 留 Phase 3 |
 | 输入模型 | 反向：用户输入载荷，输出 SF 区间 | 工程师真使用场景是"知道设计载荷，验证安全"；正向只能给材料极限，不闭环 |
 | 各向同性强度优先级 | `yield_mpa` 优先，回退到 `tensile_strength_mpa` | 工程默认；屈服比极限更保守 |
-| Tsai-Wu 耦合 F12 | 工程默认 `-1/(2*sqrt(Xt*Xc*Yt*Yc))` | 文献保守做法；与 `CONFIDENCE_SPREAD` 一样性质，标注"待业务专家校准" |
+| Tsai-Wu 耦合 F12 | **默认 `F12 = 0`**，seed 可显式 override `f12_star` ∈ [-1, +1]（Tsai-Hahn 标准化耦合） | Tsai-Wu 经典公式 `-1/(2·sqrt(...))` 在某些复合体系下非物理（违反凸性条件）；MVP 阶段保守取 0（即退化为 Tsai-Hill），有供应商或测试数据后通过 seed 的 `f12_star` 显式注入，按 `F12 = f12_star / (2·sqrt(Xt·Xc·Yt·Yc))` 计算 |
 | 区间算术 | 复用 Phase 1 `Interval` + 端点穷举 | Quadratic 求根 4 端点组合，SF 区间取 min/max |
 | Refusal 替代材料策略 | 只查 envelope 覆盖，不算载荷可行性 | 避免循环逻辑；让用户自己做下一步 |
 | Seed 升级范围 | 仅 3 材料：ti_6al_4v / pa66_gf30 / carbon_epoxy_quasi_iso | 覆盖 MVP；其余跳过失效分析（向后兼容） |
@@ -55,6 +55,7 @@ class StrengthAllowables:
     Yt_mpa: Interval | None = None   # 横向拉伸
     Yc_mpa: Interval | None = None   # 横向压缩
     S_mpa:  Interval | None = None   # 面内剪切
+    f12_star: float = 0.0            # Tsai-Wu 标准化耦合 ∈ [-1, +1]，默认 0（=Tsai-Hill 退化，保守）
 
     source: str | None = None        # "supplier datasheet" / "MMPDS handbook" / "engineering default"
 
@@ -92,11 +93,21 @@ class SafetyReport:
         return self.factors[self.governing_index]
 
     @property
+    def status(self) -> str:
+        """'pass' / 'marginal' / 'fail' — see §3.7 thresholds."""
+        sf = self.governing.value
+        if sf.low >= 1.5:
+            return "pass"
+        if sf.typical >= 1.0:
+            return "marginal"
+        return "fail"
+
+    @property
     def passed(self) -> bool:
-        return self.governing.pass_at_typical and self.governing.value.low >= 1.0
+        return self.status == "pass"
 ```
 
-`passed` 严格要求"典型通过 + 区间下界仍通过"——任一不满足就 marginal/fail。
+`passed` 现在严格要求 `SF.value.low >= 1.5`（MVP 内部研发初筛阈值，见 §3.7）。介于 1.0–1.5 为 marginal，<1.0 为 fail。
 
 ### 3.2 `material_eval/stress_analysis.py`（新增）
 
@@ -193,7 +204,8 @@ def tsai_wu_safety_factor(
         F11 = 1/(Xt·Xc)
         F22 = 1/(Yt·Yc)
         F66 = 1/S²
-        F12 = -1/(2·sqrt(Xt·Xc·Yt·Yc))   # 工程默认耦合，待校准
+        F12 = allowables.f12_star / (2·sqrt(Xt·Xc·Yt·Yc))   # f12_star 默认 0（退化为 Tsai-Hill），
+                                                              # 仅当 seed 显式指定 -1≤f12_star≤+1 时启用经典 Tsai-Wu 耦合
 
     SF 通过解 a·SF² + b·SF − 1 = 0 求得：
         a = F11·s1² + F22·s2² + F66·tau12² + 2·F12·s1·s2
@@ -330,7 +342,12 @@ refusal = build_refusal_report(
 *Tsai-Wu F12 耦合系数采用工程默认 -1/(2·sqrt(Xt·Xc·Yt·Yc))，待业务专家校准。*
 ```
 
-状态判定：`SF.value.low >= 1.0 → ✓ pass`，`SF.value.typical >= 1.0 > SF.value.low → ⚠ marginal`，否则 `✗ fail`。
+状态判定（MVP 内部研发初筛保守阈值）：
+- `SF.value.low >= 1.5` → **✓ pass**（含不确定度区间下界仍有 1.5 倍安全余量）
+- `1.0 <= SF.value.low < 1.5` 或 `SF.value.typical >= 1.0 > SF.value.low` → **⚠ marginal**（典型可过但区间下界余量不足，需补数据或加保险）
+- `SF.value.typical < 1.0` → **✗ fail**（典型工况不通过，几乎一定失效）
+
+理由：航空主结构 SF=1.5、民航 FAR-25 SF=1.4、汽车 1.25–1.5、内部 R&D 早筛偏严。本工具是研发筛选，不是认证；marginal 是给"值得继续做实验验证"的中间档。
 
 ### 3.8 `material_eval/ui_streamlit.py`（扩展）
 
@@ -352,7 +369,9 @@ refusal = build_refusal_report(
 |---|---|---|---|
 | `ti_6al_4v` | yield_mpa | 830 / 880 / 930 | MMPDS-typ, engineering default, needs lot-specific test |
 | `pa66_gf30` | yield_mpa | 80 / 100 / 120 | datasheet typ, depends on moisture and orientation, needs supplier confirmation |
-| `carbon_epoxy_quasi_iso` | Xt / Xc / Yt / Yc / S | （5 项区间，按典型 T700/epoxy 系统 ±15%） | textbook typical, needs layup/cure/test confirmation |
+| `carbon_epoxy_quasi_iso` | Xt / Xc / Yt / Yc / S，f12_star=0 | Xt: 1700/2000/2300, Xc: 1100/1400/1700, Yt: 50/65/80, Yc: 180/220/260, S: 80/100/120（典型 T700/Epoxy 准各向同性 ±15%） | textbook typical (Tsai 1980), needs layup/cure/test confirmation |
+
+注：`kevlar_aramid_fiber`（STRAP 场景）**不需要单独的 strength_allowables**——strap topology 只受轴向拉伸，von Mises 会自动 fallback 到 `material.tensile_strength_mpa`（Phase 1 已是三点区间），等价于"按极限强度评估"。该 fallback 路径在 smoke 测试覆盖。
 
 ## 4. 数据流（端到端）
 
@@ -399,7 +418,7 @@ UI tabs: 工程初筛 / 证据卡 / 中文报告 / 安全性评估（Phase 2 新
 
 | 风险 | 缓解 |
 |---|---|
-| `F12` 工程默认在某些复合体系下过保守（甚至非物理） | 报告每条 Tsai-Wu SF 标注 "F12 采用工程默认"；UI 提供说明气泡；后续 Phase 3 允许 seed 显式指定 F12 |
+| `F12` 经典公式在某些复合体系下非物理 | 默认 `f12_star = 0`（退化为 Tsai-Hill）规避；seed 可显式 override，每条 Tsai-Wu SF 标注当前 f12_star 取值 |
 | CLT 反算只处理面内拉伸（不含弯矩 M_x） | 文档明确"Phase 2 仅支持面内载荷输入"；报告章节标注"未考虑面外弯曲" |
 | `strength_allowables` seed 数据不准 | 与 envelope 一样标 `source = "engineering default, needs supplier confirmation"`，UI 显式渲染 |
 | 反向应力穿零（Interval 除法异常） | failure_criteria 模块捕获 IntervalError → 返回 SafetyFactor(value=Interval.point(0, ""), dominant_mode="indeterminate", notes=("应力区间穿零，无法判定安全系数",)) |
