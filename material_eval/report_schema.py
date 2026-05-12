@@ -16,6 +16,45 @@ ClaimSupportLevel = Literal["direct", "context", "needs_review"]
 ClaimType = Literal["verdict", "performance", "risk", "evidence", "assumption"]
 
 
+class IntervalPayload(BaseModel):
+    low: float
+    typical: float
+    high: float
+    unit: str
+    widened: bool = False
+
+    @classmethod
+    def from_interval(cls, iv) -> "IntervalPayload":
+        return cls(low=iv.low, typical=iv.typical, high=iv.high, unit=iv.unit, widened=iv.widened)
+
+
+class ViolationPayload(BaseModel):
+    axis: str
+    input_value: float
+    allowed_low: float
+    allowed_high: float
+    source: str | None = None
+
+
+class EnvelopeReportPayload(BaseModel):
+    has_declared_envelope: bool
+    violations: list[ViolationPayload] = []
+
+    @classmethod
+    def from_report(cls, report) -> "EnvelopeReportPayload":
+        return cls(
+            has_declared_envelope=report.has_declared_envelope,
+            violations=[
+                ViolationPayload(
+                    axis=v.axis, input_value=v.input_value,
+                    allowed_low=v.allowed_range[0], allowed_high=v.allowed_range[1],
+                    source=v.source,
+                )
+                for v in report.violations
+            ],
+        )
+
+
 class ClaimBinding(BaseModel):
     source_type: ClaimSourceType
     reference_id: str
@@ -24,6 +63,7 @@ class ClaimBinding(BaseModel):
     value: float | str | None = None
     unit: str | None = None
     note: str = ""
+    interval: IntervalPayload | None = None
 
 
 class ReportClaim(BaseModel):
@@ -44,6 +84,7 @@ class StructuredReport(BaseModel):
     created_at: str
     claims: list[ReportClaim] = Field(min_length=1)
     open_questions: list[str] = Field(default_factory=list)
+    envelope_report: EnvelopeReportPayload | None = None
 
     def source_type_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}

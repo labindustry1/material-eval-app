@@ -63,5 +63,36 @@ class ReportSchemaTest(unittest.TestCase):
         self.assertIn("结构化结论追踪", draft.report.markdown)
 
 
+class IntervalPayloadTest(unittest.TestCase):
+    def test_roundtrip_from_interval(self):
+        from material_eval.uncertainty import Interval
+        from material_eval.report_schema import IntervalPayload
+        iv = Interval(low=1.0, typical=2.0, high=3.0, unit="MPa")
+        p = IntervalPayload.from_interval(iv)
+        self.assertEqual(p.low, 1.0)
+        self.assertEqual(p.typical, 2.0)
+        self.assertEqual(p.high, 3.0)
+        self.assertEqual(p.unit, "MPa")
+        self.assertFalse(p.widened)
+
+
+class EnvelopeReportPayloadTest(unittest.TestCase):
+    def test_from_report_with_violations(self):
+        from material_eval.uncertainty import EnvelopeReport, Violation
+        from material_eval.report_schema import EnvelopeReportPayload
+        r = EnvelopeReport(
+            violations=(Violation(axis="temperature_C", input_value=150.0,
+                                  allowed_range=(-40.0, 120.0), source="seed"),),
+            has_declared_envelope=True,
+        )
+        p = EnvelopeReportPayload.from_report(r)
+        self.assertTrue(p.has_declared_envelope)
+        self.assertEqual(len(p.violations), 1)
+        self.assertEqual(p.violations[0].axis, "temperature_C")
+        self.assertEqual(p.violations[0].allowed_low, -40.0)
+        self.assertEqual(p.violations[0].allowed_high, 120.0)
+        self.assertEqual(p.violations[0].source, "seed")
+
+
 if __name__ == "__main__":
     unittest.main()
