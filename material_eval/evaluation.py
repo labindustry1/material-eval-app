@@ -11,6 +11,7 @@ from material_eval.laminates import LaminateResult, LaminateStack, analyze_lamin
 from material_eval.materials import MaterialCandidate
 from material_eval.reporting import ReportDraft, build_internal_report, build_refusal_report
 from material_eval.storage import DEFAULT_DB_PATH, save_run
+from material_eval.strength import SafetyReport, StrengthAllowables
 from material_eval.uncertainty import EnvelopeReport, EnvelopeSpec
 
 
@@ -25,6 +26,10 @@ class EvaluationRequest:
     # 新增：若提供 condition，则优先于 dimensions；若提供 material_envelope 且越界则短路
     condition: Condition | None = None
     material_envelope: EnvelopeSpec | None = None
+    # Task 7: 强度许用值，用于 safety 分析分支
+    strength_allowables: StrengthAllowables | None = None
+    # Task 9: 材料库 ID，用于 refusal 分支反查 entry 和替代材料
+    material_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +51,7 @@ class EvaluationDraft:
     laminate_result: LaminateResult | None
     evidence_cards: list[EvidenceCard]
     report: ReportDraft
+    safety_report: SafetyReport | None = None
 
 
 def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefusal:
@@ -62,12 +68,31 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
     if request.material_envelope is not None:
         envelope_report = request.material_envelope.check(condition)
         if envelope_report.violations:
-            refusal = build_refusal_report(
-                material=request.material,
-                part=request.part,
-                condition=condition,
-                envelope_report=envelope_report,
-            )
+            # Task 9: wire alternatives + missing_data_hints into refusal report
+            try:
+                from material_eval.material_property_library import MaterialPropertyLibrary
+                from material_eval.alternatives import suggest_alternatives_for, missing_data_hints
+
+                library = MaterialPropertyLibrary()
+                suggestions = suggest_alternatives_for(condition, request.part, library)
+                material_entry = library.materials.get(request.material_id) if request.material_id else None
+                hints = missing_data_hints(material_entry, envelope_report, condition)
+                refusal = build_refusal_report(
+                    material=request.material,
+                    part=request.part,
+                    condition=condition,
+                    envelope_report=envelope_report,
+                    suggested_alternatives=tuple(s.material_name for s in suggestions),
+                    missing_data_hints=hints,
+                )
+            except Exception:
+                # Fallback: basic refusal without alternatives
+                refusal = build_refusal_report(
+                    material=request.material,
+                    part=request.part,
+                    condition=condition,
+                    envelope_report=envelope_report,
+                )
             return EnvelopeRefusal(
                 material=request.material,
                 part=request.part,
@@ -83,6 +108,31 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
         request.evidence_query or _default_evidence_query(request),
         retrieval_mode=request.retrieval_mode,
     )
+
+    # Task 7: safety analysis branch
+    safety_report = None
+    allowables = request.strength_allowables
+    if allowables is not None and (allowables.has_isotropic() or allowables.has_orthotropic()):
+        if request.laminate_stack is not None and allowables.has_orthotropic():
+            from material_eval.failure_criteria import laminate_safety_factor
+            factors = laminate_safety_factor(request.laminate_stack, condition, allowables)
+            method = "tsai_wu"
+        elif allowables.has_isotropic():
+            from material_eval.failure_criteria import von_mises_safety_factor
+            from material_eval.stress_analysis import isotropic_stress_field
+            stresses = isotropic_stress_field(request.part, request.material, condition)
+            if stresses:
+                factors = (von_mises_safety_factor(stresses, request.material, allowables),)
+            else:
+                factors = ()
+            method = "von_mises"
+        else:
+            factors = ()
+            method = "skipped_no_matching_allowables"
+        if factors:
+            governing_idx = min(range(len(factors)), key=lambda i: factors[i].value.typical)
+            safety_report = SafetyReport(factors=factors, governing_index=governing_idx, method=method)
+
     # If an envelope was provided and passed, include its report in the draft
     # so the 工况包络校验 section appears in the report markdown.
     passed_envelope_report = None
@@ -106,6 +156,7 @@ def run_evaluation(request: EvaluationRequest) -> EvaluationDraft | EnvelopeRefu
         laminate_result=laminate_result,
         evidence_cards=evidence_cards,
         report=report,
+        safety_report=safety_report,
     )
 
 

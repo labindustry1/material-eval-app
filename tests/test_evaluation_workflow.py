@@ -168,5 +168,123 @@ class EnvelopeShortCircuitTest(unittest.TestCase):
         self.assertIsInstance(result, EvaluationDraft)
 
 
+class SafetyAnalysisTest(unittest.TestCase):
+    def _make_isotropic_material(self):
+        from material_eval.materials import MaterialCandidate
+        from material_eval.uncertainty import Interval
+
+        return MaterialCandidate(
+            name="测试铝合金",
+            category="金属/铝合金",
+            density_g_cm3=Interval.point(2.7, "g/cm^3"),
+            tensile_strength_mpa=Interval.point(480, "MPa"),
+            elastic_modulus_gpa=Interval.point(70, "GPa"),
+        )
+
+    def _make_strap_part(self):
+        from material_eval.catalog import PartTemplate
+
+        return PartTemplate(
+            domain="智能穿戴与柔性外骨骼",
+            name="柔性外骨骼助力带",
+            topology="STRAP",
+            constraint="",
+            search_suffix="",
+            geometry_inputs=(),
+        )
+
+    def test_no_allowables_safety_report_is_none(self):
+        """Passing strength_allowables=None should leave safety_report=None (backward compat)."""
+        from material_eval.evaluation import EvaluationDraft, EvaluationRequest, run_evaluation
+
+        material = self._make_isotropic_material()
+        part = self._make_strap_part()
+        request = EvaluationRequest(
+            material=material,
+            part=part,
+            dimensions={"width": 40, "thickness": 2.5},
+            strength_allowables=None,
+        )
+        result = run_evaluation(request)
+        self.assertIsInstance(result, EvaluationDraft)
+        self.assertIsNone(result.safety_report)
+
+    def test_isotropic_yield_produces_safety_report(self):
+        """Passing StrengthAllowables with yield_mpa + STRAP condition should produce a safety report."""
+        from material_eval.evaluation import EvaluationDraft, EvaluationRequest, run_evaluation
+        from material_eval.conditions import Condition, Quantity
+        from material_eval.strength import StrengthAllowables
+        from material_eval.uncertainty import Interval
+
+        material = self._make_isotropic_material()
+        part = self._make_strap_part()
+        condition = Condition.from_dimensions(
+            {"width": 40, "thickness": 2.5},
+            axial_force=Quantity(value=5000.0, unit="N"),
+        )
+        allowables = StrengthAllowables(
+            yield_mpa=Interval.point(270, "MPa"),
+        )
+        request = EvaluationRequest(
+            material=material,
+            part=part,
+            dimensions={"width": 40, "thickness": 2.5},
+            condition=condition,
+            strength_allowables=allowables,
+        )
+        result = run_evaluation(request)
+        self.assertIsInstance(result, EvaluationDraft)
+        self.assertIsNotNone(result.safety_report)
+        self.assertEqual(result.safety_report.method, "von_mises")
+        # governing factor should correspond to yield mode
+        self.assertIn("yield", result.safety_report.governing.dominant_mode)
+
+
+class RefusalAlternativesTest(unittest.TestCase):
+    def test_refusal_includes_alternatives_and_hints(self):
+        """PA66-GF30 at 150°C exceeds its envelope → refusal with alternatives and hints."""
+        from material_eval.evaluation import EnvelopeRefusal, EvaluationRequest, run_evaluation
+        from material_eval.conditions import Condition, Quantity
+        from material_eval.material_property_library import MaterialPropertyLibrary
+        from material_eval.catalog import PartTemplate
+
+        library = MaterialPropertyLibrary()
+        material = library.build_candidate("pa66_gf30")
+        envelope = library.envelope_for("pa66_gf30")
+
+        part = PartTemplate(
+            domain="工业与机械",
+            name="测试支架",
+            topology="STRAP",
+            constraint="",
+            search_suffix="",
+            geometry_inputs=(),
+        )
+        condition = Condition.from_dimensions(
+            {"width": 30, "thickness": 3},
+            temperature=Quantity(value=150.0, unit="degC"),
+        )
+        request = EvaluationRequest(
+            material=material,
+            part=part,
+            dimensions={"width": 30, "thickness": 3},
+            condition=condition,
+            material_envelope=envelope,
+            material_id="pa66_gf30",
+        )
+        result = run_evaluation(request)
+        self.assertIsInstance(result, EnvelopeRefusal)
+        # Should contain at least one alternative material name (e.g. Ti-6Al-4V or PEEK)
+        has_alternative = (
+            "Ti-6Al-4V" in result.refusal_markdown
+            or "PEEK" in result.refusal_markdown
+            or "Kevlar" in result.refusal_markdown
+            or "peek" in result.refusal_markdown.lower()
+        )
+        self.assertTrue(has_alternative, f"Expected alternative material in refusal markdown. Got:\n{result.refusal_markdown[:500]}")
+        # Should contain Chinese hint about missing data
+        self.assertIn("补充", result.refusal_markdown)
+
+
 if __name__ == "__main__":
     unittest.main()
