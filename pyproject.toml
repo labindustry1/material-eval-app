@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "material-eval-app"
+version = "0.1.0"
+description = "Lightweight MVP for internal material feasibility screening."
+requires-python = ">=3.12"
+dependencies = [
+  "streamlit",
+  "requests",
+  "pandas",
+  "plotly",
+  "pint",
+  "pydantic",
+  "rank-bm25",
+  "docling",
+  "sectionproperties",
+]
+
+[project.optional-dependencies]
+bge = [
+  "FlagEmbedding",
+]
+
+[tool.setuptools]
+packages = ["material_eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

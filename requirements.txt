@@ -2,7 +2,8 @@ streamlit
 requests
 pandas
 plotly
-langchain
-langchain-community
-faiss-cpu
-sentence-transformers
+pint
+pydantic
+rank-bm25
+docling
+sectionproperties

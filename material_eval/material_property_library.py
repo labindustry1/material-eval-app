@@ -1,0 +1,158 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from material_eval.materials import MaterialCandidate
+from material_eval.units import normalize_material_property
+
+
+DEFAULT_MATERIAL_LIBRARY_PATH = Path(__file__).resolve().parents[1] / "data" / "seed" / "material_property_library.json"
+
+
+@dataclass(frozen=True)
+class MaterialRecord:
+    id: str
+    name: str
+    category: str
+    form: str
+    process: str
+
+
+@dataclass(frozen=True)
+class MaterialPropertyObservation:
+    material_id: str
+    property_name: str
+    value: float
+    unit: str
+    canonical_value: float
+    canonical_unit: str
+    test_condition: str
+    source_type: str
+    source_label: str
+    confidence: float
+
+
+@dataclass(frozen=True)
+class MaterialPropertyConflict:
+    material_id: str
+    property_name: str
+    values: tuple[float, ...]
+    relative_spread: float
+    observation_count: int
+
+
+class MaterialPropertyLibrary:
+    def __init__(self, path: Path | str = DEFAULT_MATERIAL_LIBRARY_PATH) -> None:
+        self.path = Path(path)
+        raw = self._load()
+        self.version = raw.get("version", "unknown")
+        self.notes = raw.get("notes", "")
+        self.materials = {
+            item["id"]: MaterialRecord(
+                id=item["id"],
+                name=item["name"],
+                category=item["category"],
+                form=item.get("form", ""),
+                process=item.get("process", ""),
+            )
+            for item in raw.get("materials", [])
+        }
+        self.observations = [self._build_observation(item) for item in raw.get("observations", [])]
+
+    def observations_for(
+        self,
+        *,
+        material_id: str,
+        property_name: str | None = None,
+    ) -> list[MaterialPropertyObservation]:
+        return [
+            item
+            for item in self.observations
+            if item.material_id == material_id and (property_name is None or item.property_name == property_name)
+        ]
+
+    def best_observation(self, material_id: str, property_name: str) -> MaterialPropertyObservation:
+        candidates = self.observations_for(material_id=material_id, property_name=property_name)
+        if not candidates:
+            raise KeyError(f"Property observation not found: {material_id} / {property_name}")
+        return sorted(candidates, key=lambda item: (item.confidence, item.source_label), reverse=True)[0]
+
+    def build_candidate(self, material_id: str) -> MaterialCandidate:
+        material = self.materials.get(material_id)
+        if material is None:
+            raise KeyError(f"Material not found: {material_id}")
+
+        density = self.best_observation(material_id, "density_g_cm3")
+        strength = self.best_observation(material_id, "tensile_strength_mpa")
+        modulus = self.best_observation(material_id, "elastic_modulus_gpa")
+        return MaterialCandidate(
+            name=material.name,
+            category=material.category,
+            density_g_cm3=density.canonical_value,
+            tensile_strength_mpa=strength.canonical_value,
+            elastic_modulus_gpa=modulus.canonical_value,
+            notes=(
+                f"来自材料属性库 {self.version}；属性为典型工程参考值，需按供应商/实验/标准复核。"
+                f" 来源：{density.source_label}；{strength.source_label}；{modulus.source_label}。"
+            ),
+        )
+
+    def detect_conflicts(
+        self,
+        *,
+        material_id: str | None = None,
+        property_name: str | None = None,
+        relative_threshold: float = 0.15,
+    ) -> list[MaterialPropertyConflict]:
+        groups: dict[tuple[str, str], list[float]] = {}
+        for observation in self.observations:
+            if material_id is not None and observation.material_id != material_id:
+                continue
+            if property_name is not None and observation.property_name != property_name:
+                continue
+            groups.setdefault((observation.material_id, observation.property_name), []).append(
+                observation.canonical_value
+            )
+
+        conflicts: list[MaterialPropertyConflict] = []
+        for (group_material_id, group_property_name), values in groups.items():
+            if len(values) < 2:
+                continue
+            mean_value = sum(values) / len(values)
+            if mean_value == 0:
+                continue
+            relative_spread = (max(values) - min(values)) / abs(mean_value)
+            if relative_spread >= relative_threshold:
+                conflicts.append(
+                    MaterialPropertyConflict(
+                        material_id=group_material_id,
+                        property_name=group_property_name,
+                        values=tuple(sorted(values)),
+                        relative_spread=relative_spread,
+                        observation_count=len(values),
+                    )
+                )
+        return sorted(conflicts, key=lambda item: (item.material_id, item.property_name))
+
+    def _load(self) -> dict[str, Any]:
+        if not self.path.exists():
+            raise FileNotFoundError(f"Material property library seed not found: {self.path}")
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def _build_observation(self, item: dict[str, Any]) -> MaterialPropertyObservation:
+        normalized = normalize_material_property(item["property_name"], item["value"], item["unit"])
+        return MaterialPropertyObservation(
+            material_id=item["material_id"],
+            property_name=item["property_name"],
+            value=float(item["value"]),
+            unit=item["unit"],
+            canonical_value=normalized.value,
+            canonical_unit=normalized.unit,
+            test_condition=item.get("test_condition", ""),
+            source_type=item.get("source_type", ""),
+            source_label=item.get("source_label", ""),
+            confidence=max(0.0, min(1.0, float(item.get("confidence", 0.0)))),
+        )
