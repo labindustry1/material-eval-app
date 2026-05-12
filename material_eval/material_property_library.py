@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from material_eval.materials import MaterialCandidate
+from material_eval.strength import StrengthAllowables
 from material_eval.uncertainty import EnvelopeSpec, Interval
 from material_eval.units import normalize_material_property
 
@@ -21,6 +22,7 @@ class MaterialRecord:
     form: str
     process: str
     envelope: EnvelopeSpec | None = None
+    strength_allowables: StrengthAllowables | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ class MaterialPropertyLibrary:
                 form=item.get("form", ""),
                 process=item.get("process", ""),
                 envelope=self._build_envelope(item.get("envelope")),
+                strength_allowables=self._build_allowables(item.get("strength_allowables")),
             )
             for item in raw.get("materials", [])
         }
@@ -165,6 +168,10 @@ class MaterialPropertyLibrary:
             return None
         return record.envelope
 
+    def allowables_for(self, material_id: str) -> StrengthAllowables | None:
+        """Return strength allowables of material if declared, else None."""
+        return self.materials[material_id].strength_allowables if material_id in self.materials else None
+
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
             raise FileNotFoundError(f"Material property library seed not found: {self.path}")
@@ -192,6 +199,36 @@ class MaterialPropertyLibrary:
         if source is not None:
             kwargs["source"] = source
         return EnvelopeSpec(**kwargs)
+
+    @staticmethod
+    def _build_allowables(payload: dict[str, Any] | None) -> StrengthAllowables | None:
+        if payload is None:
+            return None
+
+        _ALLOWABLE_FIELDS = ("yield_mpa", "Xt_mpa", "Xc_mpa", "Yt_mpa", "Yc_mpa", "S_mpa")
+
+        def _parse_interval(raw: Any) -> Interval | None:
+            if raw is None:
+                return None
+            if isinstance(raw, dict):
+                return Interval(
+                    low=float(raw["low"]),
+                    typical=float(raw["typical"]),
+                    high=float(raw["high"]),
+                    unit="MPa",
+                )
+            # Legacy single-point number: use confidence=0.5 → medium spread ±15%
+            return Interval.from_confidence(float(raw), "MPa", confidence=0.5)
+
+        kwargs: dict[str, Any] = {}
+        for field_name in _ALLOWABLE_FIELDS:
+            raw_val = payload.get(field_name)
+            kwargs[field_name] = _parse_interval(raw_val)
+
+        kwargs["f12_star"] = float(payload.get("f12_star", 0.0))
+        kwargs["source"] = payload.get("source")
+
+        return StrengthAllowables(**kwargs)
 
     def _build_observation(self, item: dict[str, Any]) -> MaterialPropertyObservation:
         raw_value = item["value"]

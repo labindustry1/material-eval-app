@@ -287,6 +287,144 @@ class SeedIntegrityTest(unittest.TestCase):
     def test_non_core_envelope_is_none(self):
         self.assertIsNone(self.lib.envelope_for("stainless_316l"))
 
+    def test_three_materials_have_strength_allowables(self):
+        """Phase 2 seed upgrade: 3 core materials should declare strength_allowables."""
+        ti = self.lib.allowables_for("ti_6al_4v")
+        self.assertIsNotNone(ti)
+        self.assertIsNotNone(ti.yield_mpa)
+        self.assertAlmostEqual(ti.yield_mpa.typical, 880.0)
+        self.assertTrue(ti.has_isotropic())
+
+        pa = self.lib.allowables_for("pa66_gf30")
+        self.assertIsNotNone(pa)
+        self.assertAlmostEqual(pa.yield_mpa.typical, 100.0)
+
+        ce = self.lib.allowables_for("carbon_epoxy_quasi_iso")
+        self.assertIsNotNone(ce)
+        self.assertTrue(ce.has_orthotropic())
+        self.assertAlmostEqual(ce.Xt_mpa.typical, 2000.0)
+        self.assertAlmostEqual(ce.S_mpa.typical, 100.0)
+        self.assertEqual(ce.f12_star, 0.0)
+
+    def test_other_materials_have_no_strength_allowables(self):
+        """非核心材料保持 None（向后兼容）。"""
+        self.assertIsNone(self.lib.allowables_for("kevlar_aramid_fiber"))
+        self.assertIsNone(self.lib.allowables_for("stainless_316l"))
+
+
+class StrengthAllowablesLoadingTest(unittest.TestCase):
+    """Task 2: verify strength_allowables seed field parsing and allowables_for API."""
+
+    def _make_library(self, materials: list) -> MaterialPropertyLibrary:
+        seed = {
+            "version": "allowables_test",
+            "materials": materials,
+            "observations": [],
+        }
+        with TemporaryDirectory() as tmp_dir:
+            seed_path = Path(tmp_dir) / "material_property_library.json"
+            seed_path.write_text(json.dumps(seed), encoding="utf-8")
+            lib = MaterialPropertyLibrary(seed_path)
+        return lib
+
+    # Test 1: three-point dict yield_mpa + source
+    def test_three_point_yield_mpa_and_source(self):
+        lib = self._make_library([
+            {
+                "id": "test_id",
+                "name": "Test Material",
+                "category": "metal",
+                "form": "sheet",
+                "process": "rolling",
+                "strength_allowables": {
+                    "yield_mpa": {"low": 800, "typical": 880, "high": 930},
+                    "source": "test",
+                },
+            }
+        ])
+        allowables = lib.allowables_for("test_id")
+        self.assertIsNotNone(allowables)
+        self.assertAlmostEqual(allowables.yield_mpa.typical, 880)
+        self.assertAlmostEqual(allowables.yield_mpa.low, 800)
+        self.assertAlmostEqual(allowables.yield_mpa.high, 930)
+        self.assertEqual(allowables.source, "test")
+
+    # Test 2: missing strength_allowables → None
+    def test_missing_strength_allowables_returns_none(self):
+        lib = self._make_library([
+            {
+                "id": "other_id",
+                "name": "Other Material",
+                "category": "polymer",
+                "form": "pellet",
+                "process": "extrusion",
+            }
+        ])
+        self.assertIsNone(lib.allowables_for("other_id"))
+
+    # Test 3: full orthotropic 5 fields + f12_star
+    def test_full_orthotropic_fields_and_f12_star(self):
+        lib = self._make_library([
+            {
+                "id": "composite_id",
+                "name": "Composite Material",
+                "category": "composite",
+                "form": "tape",
+                "process": "autoclave",
+                "strength_allowables": {
+                    "Xt_mpa": {"low": 1200, "typical": 1400, "high": 1550},
+                    "Xc_mpa": {"low": 800, "typical": 900, "high": 980},
+                    "Yt_mpa": {"low": 40, "typical": 50, "high": 60},
+                    "Yc_mpa": {"low": 90, "typical": 110, "high": 130},
+                    "S_mpa": {"low": 60, "typical": 70, "high": 80},
+                    "f12_star": 0.5,
+                    "source": "MIL-HDBK-17",
+                },
+            }
+        ])
+        allowables = lib.allowables_for("composite_id")
+        self.assertIsNotNone(allowables)
+        self.assertAlmostEqual(allowables.Xt_mpa.typical, 1400)
+        self.assertAlmostEqual(allowables.Xc_mpa.typical, 900)
+        self.assertAlmostEqual(allowables.Yt_mpa.typical, 50)
+        self.assertAlmostEqual(allowables.Yc_mpa.typical, 110)
+        self.assertAlmostEqual(allowables.S_mpa.typical, 70)
+        self.assertAlmostEqual(allowables.f12_star, 0.5)
+        self.assertTrue(allowables.has_orthotropic())
+
+    # Test 4: legacy single-point number (not three-point dict)
+    def test_legacy_single_point_number_yield_mpa(self):
+        lib = self._make_library([
+            {
+                "id": "legacy_id",
+                "name": "Legacy Material",
+                "category": "metal",
+                "form": "bar",
+                "process": "casting",
+                "strength_allowables": {
+                    "yield_mpa": 800,
+                },
+            }
+        ])
+        allowables = lib.allowables_for("legacy_id")
+        self.assertIsNotNone(allowables)
+        self.assertAlmostEqual(allowables.yield_mpa.typical, 800)
+        self.assertLess(allowables.yield_mpa.low, 800)
+        self.assertGreater(allowables.yield_mpa.high, 800)
+
+    # Test 5: non-existent material_id → None
+    def test_nonexistent_material_id_returns_none(self):
+        lib = self._make_library([
+            {
+                "id": "existing_id",
+                "name": "Existing",
+                "category": "metal",
+                "form": "sheet",
+                "process": "rolling",
+            }
+        ])
+        self.assertIsNone(lib.allowables_for("does_not_exist"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -156,5 +156,99 @@ class InternalReportEnvelopeSectionTest(unittest.TestCase):
         self.assertNotIn("| 数值 |", report.markdown)
 
 
+class SafetyReportSectionTest(unittest.TestCase):
+    """Tests for the 安全性评估 section in build_internal_report."""
+
+    def _make_base_args(self):
+        from material_eval.catalog import Catalog
+        from material_eval.computation import calculate_part
+        from material_eval.evidence import search_evidence
+        from material_eval.materials import build_single_material
+
+        catalog = Catalog()
+        part = catalog.get_part("人形机器人核心骨架", "下肢大扭矩管状连杆")
+        material = build_single_material(
+            name="测试材料",
+            category="合成蛋白/生物基大分子",
+            density_g_cm3=1.3,
+            tensile_strength_mpa=9600,
+            elastic_modulus_gpa=100,
+        )
+        dimensions = {"diameter": 30, "length": 350, "thickness": 3}
+        calculation = calculate_part(part, material, dimensions)
+        evidence = search_evidence("机器人 连杆")
+        return dict(
+            material=material,
+            part=part,
+            dimensions=dimensions,
+            calculation=calculation,
+            evidence_cards=evidence,
+        )
+
+    def _make_safety_report(self, low, typical, high, method="von_mises", location="BEAM/root_top"):
+        from material_eval.strength import SafetyFactor, SafetyReport
+        from material_eval.uncertainty import Interval
+
+        factor = SafetyFactor(
+            value=Interval(low, typical, high, ""),
+            pass_at_typical=typical >= 1.5,
+            dominant_mode="yield",
+            criterion=method,
+            location=location,
+        )
+        return SafetyReport(factors=(factor,), governing_index=0, method=method)
+
+    def test_no_safety_report_no_section(self):
+        args = self._make_base_args()
+        report = build_internal_report(**args)
+        self.assertNotIn("安全性评估", report.markdown)
+
+    def test_pass_status_shows_pass_icon(self):
+        from material_eval.strength import SafetyFactor, SafetyReport
+        from material_eval.uncertainty import Interval
+
+        factor = SafetyFactor(
+            value=Interval(1.6, 1.8, 2.0, ""),
+            pass_at_typical=True,
+            dominant_mode="yield",
+            criterion="von_mises",
+            location="BEAM/root_top",
+        )
+        safety_report = SafetyReport(factors=(factor,), governing_index=0, method="von_mises")
+        args = self._make_base_args()
+        report = build_internal_report(**args, safety_report=safety_report)
+        self.assertIn("安全性评估", report.markdown)
+        self.assertIn("✓ pass", report.markdown)
+
+    def test_marginal_and_fail_icons(self):
+        from material_eval.strength import SafetyFactor, SafetyReport
+        from material_eval.uncertainty import Interval
+
+        marginal_factor = SafetyFactor(
+            value=Interval(1.2, 1.4, 1.6, ""),
+            pass_at_typical=False,
+            dominant_mode="tsai_wu",
+            criterion="tsai_wu",
+            location="ply_0",
+        )
+        fail_factor = SafetyFactor(
+            value=Interval(0.5, 0.9, 1.2, ""),
+            pass_at_typical=False,
+            dominant_mode="tsai_wu",
+            criterion="tsai_wu",
+            location="ply_1",
+        )
+        # governing_index=1 (fail factor is worst)
+        safety_report = SafetyReport(
+            factors=(marginal_factor, fail_factor),
+            governing_index=1,
+            method="tsai_wu",
+        )
+        args = self._make_base_args()
+        report = build_internal_report(**args, safety_report=safety_report)
+        self.assertIn("⚠ marginal", report.markdown)
+        self.assertIn("✗ fail", report.markdown)
+
+
 if __name__ == "__main__":
     unittest.main()

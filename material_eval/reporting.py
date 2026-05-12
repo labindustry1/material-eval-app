@@ -11,6 +11,7 @@ from material_eval.laminates import LaminateResult
 from material_eval.materials import MaterialCandidate
 from material_eval.report_schema import StructuredReport, build_structured_report
 from material_eval.scoring import Scorecard, build_scorecard
+from material_eval.strength import SafetyReport
 from material_eval.uncertainty import EnvelopeReport
 
 
@@ -80,6 +81,7 @@ def build_internal_report(
     evidence_cards: list[EvidenceCard],
     envelope_report: EnvelopeReport | None = None,
     condition=None,
+    safety_report: SafetyReport | None = None,
 ) -> ReportDraft:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     title = f"{material.name}在{part.name}中的可行性初筛报告"
@@ -101,6 +103,7 @@ def build_internal_report(
     risks_md = "\n".join(f"- {item}" for item in risks)
     laminate_md = _laminate_markdown(laminate_result)
     envelope_section_md = _envelope_section_markdown(envelope_report, condition)
+    safety_section_md = _safety_section_markdown(safety_report)
     scorecard = build_scorecard(
         material=material,
         part=part,
@@ -165,7 +168,7 @@ def build_internal_report(
 {metrics_md}
 
 {laminate_md}
-
+{safety_section_md}
 ## 5. 证据来源
 
 {evidence_md}
@@ -385,6 +388,57 @@ def _envelope_section_markdown(envelope_report: EnvelopeReport | None, condition
             rows.append(f"| {axis} | {input_val} | — | ✓ |")
 
     return header + "\n" + "\n".join(rows) + "\n"
+
+
+def _safety_section_markdown(safety_report: SafetyReport | None) -> str:
+    """Build the '安全性评估' markdown section.
+
+    Returns an empty string when safety_report is None.
+    """
+    if safety_report is None:
+        return ""
+
+    _METHOD_LABELS = {
+        "von_mises": "von Mises 屈服",
+        "tsai_wu": "Tsai-Wu 复合材料失效",
+    }
+    method_label = _METHOD_LABELS.get(safety_report.method, "未知")
+
+    def _status_icon(factor) -> str:
+        sf = factor.value
+        if sf.low >= 1.5:
+            return "✓ pass"
+        if sf.typical >= 1.0:
+            return "⚠ marginal"
+        return "✗ fail"
+
+    rows = [
+        f"## 安全性评估（方法：{method_label}）",
+        "",
+        "| 评估位置 | 安全系数（low / typical / high） | 主导模式 | 状态 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for factor in safety_report.factors:
+        sf = factor.value
+        icon = _status_icon(factor)
+        rows.append(
+            f"| {factor.location} | {sf.low:.2f} / {sf.typical:.2f} / {sf.high:.2f}"
+            f" | {factor.dominant_mode} | {icon} |"
+        )
+
+    gov = safety_report.governing
+    rows.append("")
+    rows.append(
+        f"**控制层**：`{gov.location}`，最低 SF.value.low = {gov.value.low:.2f}"
+    )
+
+    if safety_report.method == "tsai_wu":
+        rows.append("")
+        rows.append(
+            "*Tsai-Wu F12 耦合系数采用 seed 中指定的 f12_star（默认 0，即 Tsai-Hill 退化）*"
+        )
+
+    return "\n".join(rows) + "\n"
 
 
 def _safe_filename(value: str) -> str:

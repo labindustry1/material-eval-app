@@ -153,6 +153,46 @@
 .venv/bin/python -m compileall material_eval app.py tests
 ```
 
+### 11. Phase 2 失效准则 + Refusal 导航（2026-05-12）
+
+设计：`docs/superpowers/specs/2026-05-12-phase2-failure-criteria-design.md`
+实现 plan：`docs/superpowers/plans/2026-05-12-phase2-failure-criteria.md`
+分支：`feature/phase2-failure-criteria`（13 个 commit）
+
+让 MVP 评估闭环：从"能算多少"升级到"能不能用"。
+
+**Track A — 失效准则**：
+- 新增 `material_eval/strength.py`：`StrengthAllowables`（含 yield_mpa / Xt/Xc/Yt/Yc/S/f12_star）、`SafetyFactor`、`SafetyReport`（三档 status：pass≥1.5 / marginal≥1.0 / fail<1.0）
+- 新增 `material_eval/stress_analysis.py`：`isotropic_stress_field`（BEAM/I_BEAM/PLATE/STRAP 反向算应力）+ `ply_stress_field`（CLT 反算每层主轴应力）
+- 新增 `material_eval/failure_criteria.py`：`von_mises_safety_factor`（金属/塑料）+ `tsai_wu_safety_factor`（复合材料，f12_star 可在 seed override）+ `laminate_safety_factor`
+- 升级 `material_property_library.py`：解析 `strength_allowables` 顶层字段，新增 `allowables_for()` API；保留向后兼容（旧 seed 仍可读）
+
+**Track B — Refusal 建设性出口**：
+- 新增 `material_eval/alternatives.py`：`suggest_alternatives_for()` 从库反查 envelope 覆盖当前工况的材料；`missing_data_hints()` 生成中文缺失数据清单
+- 升级 `evaluation.py`：refusal 分支自动注入替代材料 + 缺失数据提示
+- 升级 `reporting.py`：`build_refusal_report` 已在 Phase 1 实现，Phase 2 复用并自动接 alternatives
+
+**集成**：
+- `EvaluationRequest` 新增 `strength_allowables` / `material_id`；`EvaluationDraft` 新增 `safety_report`
+- `run_evaluation` 在 calculate_part 之后自动分发 Tsai-Wu（laminate + orthotropic）或 von Mises（其他）；无 allowables 时跳过（向后兼容）
+- `reporting.build_internal_report` 新增 "安全性评估" markdown 章节，含 SF 区间表格、pass/marginal/fail 图标、Tsai-Wu 时 f12_star 备注
+- `ui_streamlit.py` 工况输入区加 axial_force / bending_moment 两组数值 + 单位下拉，新增 "安全性评估" tab 渲染 SafetyReport
+- Seed 升级 3 材料：`ti_6al_4v`（yield_mpa）/ `pa66_gf30`（yield_mpa）/ `carbon_epoxy_quasi_iso`（Xt/Xc/Yt/Yc/S/f12_star=0）
+
+**端到端验证**：`tests/test_phase2_smoke.py` 4 个场景全过：
+1. Ti-6Al-4V 骨架 BEAM + 10kN axial + 50 N·m bending → von Mises pass（SF ~19.4）
+2. PA66-GF30 外壳 PLATE + 2kN + 10 N·m → von Mises（SF ~1.09，marginal）
+3. Kevlar 助力带 STRAP + 5kN（无 allowables）→ safety_report=None 优雅降级
+4. Carbon-Epoxy 4 层 [0/90/90/0] laminate + 1kN axial → Tsai-Wu method，4 个 PlyStress factors
+
+**关键工程决策（专家判断锁定）**：
+- F12 默认 `f12_star = 0`（即 Tsai-Hill 退化），seed 可 override 到 [-1, +1]——经典 F12 公式对未知体系可能非物理，保守取 0
+- CLT 仅处理面内拉伸（M_x 弯矩留 Phase 3）
+- SF 阈值：pass ≥ 1.5（含不确定度下界仍有 50% 安全余量）/ marginal ∈ [1.0, 1.5) / fail < 1.0
+- Kevlar 不需要单独 allowables，复用 Phase 1 已有的 `material.tensile_strength_mpa` 自动 fallback
+
+**测试基线**：218 unittest 全绿（Phase 1 的 155 + 新增 63）。
+
 ## 新发现
 
 - 材料属性不能只存一个数字。不同牌号、工艺、方向、温湿度会导致巨大差异，因此 seed 数据必须标注为"典型工程参考/需复核"，不能包装成已认证事实。
@@ -167,15 +207,19 @@
 - 单位系统已经覆盖几何/载荷/温度/湿度/应变率（Phase 1 完成），但疲劳/冲击工况仍未纳入。
 - 透明评分卡已经可读，但评分权重仍是工程默认值，需要业务专家用历史项目和真实实验结果校准。
 
-## 下一步（Phase 2 候选）
+## 下一步（Phase 3 候选）
 
-1. **复合材料失效准则**：Tsai-Hill / Tsai-Wu / Hashin。依赖 Phase 1 已就绪的 Interval 和 envelope。
-2. **Claim binding 细化**：从粗粒度来源升级到句子级/证据片段级/计算变量级。
-3. **`CONFIDENCE_SPREAD` 校准**：用真实实验/历史项目数据校准三档百分比。
-4. **Refusal 建设性出口**：填充 `suggested_alternatives` 和 `missing_data_hints`，让用户被拒后知道下一步怎么走。
-5. **扩充知识库和材料属性库**：把 seed 占位逐步替换为内部实验/供应商/标准来源数据。
-6. **疲劳/冲击工况**：纳入单位系统和 envelope。
-7. **评分卡权重校准**：用历史项目和真实实验结果校准 scorecard 各维度权重和阈值。
+**Phase 1 + Phase 2 已完成纯架构性优化**。剩余候选大多需要外部输入（真实数据、业务专家）或属于持续运营工作：
+
+1. **Hashin 分模式失效准则** —— Tsai-Wu 给一个总判定，Hashin 区分 fiber tensile / fiber compressive / matrix tensile / matrix compressive，让报告能讲清楚"谁先坏"。依赖 Phase 2 的 PlyStress 和 strength_allowables。**纯架构**。
+2. **CLT 面外弯矩 M_x** —— Phase 2 红线限定面内拉伸；扩展到 M_x 让 CLT 支持完整 [N, M] 工况。需要 D 矩阵（弯曲刚度）实现。**纯架构**。
+3. **屈曲分析** —— 柱屈曲（欧拉公式）和板屈曲（薄板临界载荷）。**纯架构**。
+4. **疲劳分析** —— S-N 曲线 + Miner 损伤累积；需要工况里的循环数（Phase 1 已有 fatigue_cycles 字段）。**需要材料 S-N 数据**。
+5. **F12 / CONFIDENCE_SPREAD / 评分卡权重的实验校准** —— **需要真实实验数据或业务专家输入**，不能纯架构推。
+6. **Claim binding 句子级 / 计算变量级** —— 报告每条结论绑定到具体证据片段或计算变量。**纯架构**。
+7. **扩充知识库 / 材料属性库** —— 把 seed 占位逐步替换为内部实验/供应商/标准来源数据。**持续运营工作**。
+
+**推荐 Phase 3 优先级**（如果继续）：Hashin（1）+ Claim binding（6）—— 都是纯架构推动 + 真正提升科学严谨度的可追溯性。其余建议等真实使用反馈再决定。
 
 ## 交接验证命令
 
