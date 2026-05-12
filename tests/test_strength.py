@@ -10,7 +10,7 @@ Covers:
   - SafetyReport.passed = (status == 'pass')
 """
 
-import pytest
+import unittest
 
 from material_eval.strength import SafetyFactor, SafetyReport, StrengthAllowables
 from material_eval.uncertainty import Interval
@@ -28,7 +28,7 @@ def _interval(low: float, typical: float, high: float, unit: str = "") -> Interv
 # StrengthAllowables
 # ---------------------------------------------------------------------------
 
-class TestStrengthAllowables:
+class TestStrengthAllowables(unittest.TestCase):
     def test_has_isotropic_true_when_yield_set(self):
         sa = StrengthAllowables(yield_mpa=_interval(200, 250, 300, "MPa"))
         assert sa.has_isotropic() is True
@@ -72,7 +72,7 @@ class TestStrengthAllowables:
 # SafetyFactor
 # ---------------------------------------------------------------------------
 
-class TestSafetyFactor:
+class TestSafetyFactor(unittest.TestCase):
     def test_construction_and_fields(self):
         sf_val = _interval(1.6, 1.8, 2.0)
         sf = SafetyFactor(
@@ -115,7 +115,7 @@ def _make_factor(low: float, typical: float, high: float) -> SafetyFactor:
     )
 
 
-class TestSafetyReport:
+class TestSafetyReport(unittest.TestCase):
     def test_governing_returns_correct_factor(self):
         f0 = _make_factor(1.6, 1.8, 2.0)
         f1 = _make_factor(0.8, 1.0, 1.2)
@@ -167,3 +167,7 @@ class TestSafetyReport:
             method="von_mises",
         )
         assert report.passed is False
+
+
+if __name__ == "__main__":
+    unittest.main()
