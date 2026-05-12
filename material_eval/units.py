@@ -81,3 +81,66 @@ def normalize_material_property(property_name: str, value: float, unit: str) -> 
 def _to_pint_unit(unit: str) -> str:
     cleaned = unit.strip()
     return _UNIT_ALIASES.get(cleaned, cleaned)
+
+
+_DIMENSION_CANONICAL: dict[str, str] = {
+    "length": "mm",
+    "force": "N",
+    "moment": "N*m",
+    "stress": "MPa",
+    "pressure": "MPa",
+    "temperature": "degC",
+    "humidity": "%RH",
+    "strain_rate": "1/s",
+}
+
+_DIMENSION_ALIASES: dict[str, dict[str, str]] = {
+    "length": {
+        "m": "meter", "mm": "millimeter", "cm": "centimeter", "in": "inch", "inch": "inch",
+    },
+    "force": {
+        "N": "newton", "kN": "kilonewton", "lbf": "pound_force",
+    },
+    "moment": {
+        "N*m": "newton * meter", "N·m": "newton * meter", "Nm": "newton * meter",
+    },
+    "stress": {
+        "Pa": "pascal", "kPa": "kilopascal", "MPa": "megapascal", "GPa": "gigapascal",
+        "N/mm^2": "newton / millimeter ** 2", "N/mm2": "newton / millimeter ** 2", "psi": "psi",
+    },
+    "temperature": {
+        "degC": "degC", "°C": "degC", "C": "degC", "K": "kelvin", "kelvin": "kelvin",
+    },
+    "humidity": {"%RH": "%RH", "%": "%RH"},
+    "strain_rate": {"1/s": "1 / second", "/s": "1 / second", "s^-1": "1 / second"},
+}
+
+
+def _resolve_unit(dimension: str, unit: str) -> str:
+    aliases = _DIMENSION_ALIASES.get(dimension, {})
+    return aliases.get(unit.strip(), unit.strip())
+
+
+def normalize_quantity(value: float, unit: str, dimension: str) -> tuple[float, str]:
+    if dimension == "humidity":
+        # Pint doesn't model %RH; pass through with a literal canonical tag.
+        return float(value), _DIMENSION_CANONICAL["humidity"]
+    if dimension not in _DIMENSION_CANONICAL:
+        raise UnitCompatibilityError(f"Unknown dimension: {dimension!r}")
+    canonical = _DIMENSION_CANONICAL[dimension]
+    canonical_pint = _resolve_unit(dimension, canonical)
+    source_pint = _resolve_unit(dimension, unit)
+    try:
+        if dimension == "temperature":
+            quantity = _UNIT_REGISTRY.Quantity(float(value), source_pint)
+            normalized = quantity.to(canonical_pint)
+        else:
+            quantity = float(value) * _UNIT_REGISTRY(source_pint)
+            normalized = quantity.to(canonical_pint)
+    except pint.errors.DimensionalityError as exc:
+        raise UnitCompatibilityError(
+            f"Unit '{unit}' is not compatible with dimension '{dimension}' canonical '{canonical}'."
+        ) from exc
+    except Exception as exc:
+        raise UnitCompatibilityError(f"Could not parse unit '{unit}' for dimension '{dimension}'.") from exc
+    return float(normalized.magnitude), canonical
