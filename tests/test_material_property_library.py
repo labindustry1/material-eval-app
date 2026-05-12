@@ -287,6 +287,30 @@ class SeedIntegrityTest(unittest.TestCase):
     def test_non_core_envelope_is_none(self):
         self.assertIsNone(self.lib.envelope_for("stainless_316l"))
 
+    def test_three_materials_have_strength_allowables(self):
+        """Phase 2 seed upgrade: 3 core materials should declare strength_allowables."""
+        ti = self.lib.allowables_for("ti_6al_4v")
+        self.assertIsNotNone(ti)
+        self.assertIsNotNone(ti.yield_mpa)
+        self.assertAlmostEqual(ti.yield_mpa.typical, 880.0)
+        self.assertTrue(ti.has_isotropic())
+
+        pa = self.lib.allowables_for("pa66_gf30")
+        self.assertIsNotNone(pa)
+        self.assertAlmostEqual(pa.yield_mpa.typical, 100.0)
+
+        ce = self.lib.allowables_for("carbon_epoxy_quasi_iso")
+        self.assertIsNotNone(ce)
+        self.assertTrue(ce.has_orthotropic())
+        self.assertAlmostEqual(ce.Xt_mpa.typical, 2000.0)
+        self.assertAlmostEqual(ce.S_mpa.typical, 100.0)
+        self.assertEqual(ce.f12_star, 0.0)
+
+    def test_other_materials_have_no_strength_allowables(self):
+        """非核心材料保持 None（向后兼容）。"""
+        self.assertIsNone(self.lib.allowables_for("kevlar_aramid_fiber"))
+        self.assertIsNone(self.lib.allowables_for("stainless_316l"))
+
 
 class StrengthAllowablesLoadingTest(unittest.TestCase):
     """Task 2: verify strength_allowables seed field parsing and allowables_for API."""
