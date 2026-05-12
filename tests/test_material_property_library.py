@@ -253,5 +253,40 @@ class IntervalAndEnvelopeTest(unittest.TestCase):
         self.assertAlmostEqual(obs.confidence, 0.9)
 
 
+class SeedIntegrityTest(unittest.TestCase):
+    """Verify the production seed file passes load and contains expected core materials."""
+
+    def setUp(self):
+        from material_eval.material_property_library import MaterialPropertyLibrary
+        self.lib = MaterialPropertyLibrary()
+
+    def test_core_materials_have_envelope(self):
+        core = {"aluminum_7075_t6", "ti_6al_4v", "peek_cf30", "pa66_gf30", "kevlar_aramid_fiber"}
+        for mid in core:
+            env = self.lib.envelope_for(mid)
+            self.assertIsNotNone(env, f"{mid} missing envelope")
+            self.assertTrue(env.has_any_axis(), f"{mid} envelope has no axis")
+
+    def test_core_materials_have_temperature_envelope(self):
+        for mid in ("aluminum_7075_t6", "ti_6al_4v", "peek_cf30", "pa66_gf30", "kevlar_aramid_fiber"):
+            env = self.lib.envelope_for(mid)
+            self.assertIsNotNone(env.temperature_C, f"{mid} missing temperature envelope")
+
+    def test_core_materials_have_three_point_intervals(self):
+        for mid in ("aluminum_7075_t6", "ti_6al_4v", "peek_cf30", "pa66_gf30", "kevlar_aramid_fiber"):
+            for prop in ("density_g_cm3", "tensile_strength_mpa", "elastic_modulus_gpa"):
+                iv = self.lib.property_interval(mid, prop)
+                self.assertIsNotNone(iv, f"{mid}.{prop} missing")
+                self.assertGreater(iv.high, iv.low, f"{mid}.{prop} not a true interval")
+
+    def test_non_core_materials_still_load(self):
+        for mid in ("stainless_316l", "magnesium_az31b", "peek_unfilled"):
+            iv = self.lib.property_interval(mid, "density_g_cm3")
+            self.assertIsNotNone(iv, f"{mid} legacy single-point should still load")
+
+    def test_non_core_envelope_is_none(self):
+        self.assertIsNone(self.lib.envelope_for("stainless_316l"))
+
+
 if __name__ == "__main__":
     unittest.main()
