@@ -9,6 +9,8 @@ import streamlit as st
 from material_eval.artifacts import write_markdown_report
 from material_eval.blueprint_3d import render_3d_blueprint
 from material_eval.catalog import Catalog
+from material_eval.eight_dim_analysis import analyze_eight_dimensions
+from material_eval.web_search import search_web
 from material_eval.evaluation import EnvelopeRefusal, EvaluationRequest, run_evaluation, save_evaluation
 from material_eval.laminates import Lamina, LaminateStack
 from material_eval.material_property_library import MaterialPropertyLibrary
@@ -60,23 +62,31 @@ def run_app() -> None:
     render_evaluation_summary(draft, run_id=run_id)
     st.divider()
 
-    tab_calc, tab_evidence, tab_report, tab_history, tab_eval, tab_safety = st.tabs(["工程初筛", "证据卡", "中文报告", "评估记录", "检索评估", "安全性评估"])
+    (tab_calc, tab_safety, tab_eightdim, tab_evidence, tab_web,
+     tab_report, tab_history, tab_rageval) = st.tabs([
+         "工程初筛", "安全性评估", "商业八维剖析", "证据卡", "全网检索",
+         "中文报告", "评估记录", "检索评估",
+     ])
     with tab_calc:
         # 3D 蓝图：宏观几何 + 应力示意双视图
         render_blueprint_section(request.part.topology, request.dimensions)
         st.success(f"评估已保存，Run ID: {run_id}")
         render_calculation(draft.calculation)
         render_laminate_result(draft.laminate_result)
+    with tab_safety:
+        render_safety_report(draft.safety_report)
+    with tab_eightdim:
+        render_eight_dim_section(draft)
     with tab_evidence:
         render_evidence(draft.evidence_cards)
+    with tab_web:
+        render_web_search_section(draft)
     with tab_report:
         render_report(markdown=report_markdown, filename=draft.report.filename, report_path=report_path, run_id=run_id)
     with tab_history:
         render_recent_runs()
-    with tab_eval:
+    with tab_rageval:
         render_rag_evaluation_panel()
-    with tab_safety:
-        render_safety_report(draft.safety_report)
 
 
 def require_optional_access_code() -> None:
@@ -623,3 +633,132 @@ def render_blueprint_section(topology: str, dims: dict[str, float]) -> None:
         with col2:
             st.plotly_chart(render_3d_blueprint(topology, dims, "micro"), use_container_width=True)
         st.caption("*左：宏观几何示意；右：应力定性分布示意（非真实 CAE 仿真）。视觉用于工程直觉，数值结论以下方表格为准。*")
+
+
+# ---------------------------------------------------------------------------
+# 全网检索（Tavily） + 商业八维剖析（LLM 生成）
+# ---------------------------------------------------------------------------
+
+def render_web_search_section(draft) -> None:
+    """全网检索 tab — Tavily 实时联网检索补充内部资料库。"""
+    st.markdown("### 🌐 全网检索（Tavily 实时）")
+    st.caption("内部知识库只有有限资料；全网检索可补充行业标准、供应商资料、最新论文等公开信息。需要 `TAVILY_API_KEY`。")
+
+    default_query = f"{draft.material.name} {draft.part.name} {draft.part.domain} 应用 替代"
+    query = st.text_input("检索 query", value=default_query, key="web_query")
+    max_results = st.slider("结果数", 3, 10, 5, key="web_max")
+    if not st.button("🔎 开始全网检索", key="web_run_btn"):
+        st.info("点击按钮才会调用 Tavily（避免每次评估都消耗 API 配额）。")
+        return
+
+    with st.spinner("Tavily 检索中..."):
+        result = search_web(query, max_results=max_results)
+    if not result.ok:
+        st.warning(result.error)
+        return
+    if result.answer:
+        st.success(f"💡 **全网综合回答**：{result.answer}")
+    if not result.hits:
+        st.info("Tavily 未返回结果。")
+        return
+    st.markdown("#### 检索结果")
+    for idx, hit in enumerate(result.hits, 1):
+        with st.expander(f"[{idx}] {hit.title}　·　score={hit.score:.2f}", expanded=(idx == 1)):
+            st.markdown(f"**URL**：{hit.url}")
+            st.write(hit.content_snippet)
+
+
+def render_eight_dim_section(draft) -> None:
+    """商业八维剖析 tab — LLM 生成 8 维定性 + 数值对比。"""
+    st.markdown("### 🏆 商业八维全生命周期剖析")
+    st.caption(
+        "用 LLM 把材料 + 零件 + 工程计算 + 证据汇总为 8 维商业级剖析，"
+        "覆盖静载/疲劳/工艺/抗性/微观/经济/ESG/壁垒。需要 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY`。"
+        "本视图为商业沟通用，不替代工程计算/失效分析。"
+    )
+    if not st.button("🚀 生成八维剖析（调用 LLM）", key="eightdim_run_btn"):
+        st.info("点击按钮才会调用 LLM（避免每次评估都消耗 API 配额）。")
+        return
+
+    calc_summary_lines = [
+        f"- {m.name}: {m.value.format()} — {m.description}"
+        for m in draft.calculation.metrics
+    ]
+    if draft.safety_report is not None:
+        calc_summary_lines.append(
+            f"- 失效分析（{draft.safety_report.method}）: 控制点 {draft.safety_report.governing.location}，"
+            f"SF={draft.safety_report.governing.value.format()}，状态={draft.safety_report.status}"
+        )
+    calc_summary = "\n".join(calc_summary_lines)
+    evidence_lines = [f"- {ec.snippet[:200]}" for ec in (draft.evidence_cards or [])[:3]]
+    evidence_summary = "\n".join(evidence_lines)
+
+    with st.spinner("LLM 正在生成八维剖析（最长 2 分钟）..."):
+        report = analyze_eight_dimensions(
+            material_name=draft.material.name,
+            part_name=draft.part.name,
+            domain=draft.part.domain,
+            constraint=getattr(draft.part, "constraint", ""),
+            calculation_summary=calc_summary,
+            evidence_summary=evidence_summary,
+        )
+    if not report.ok:
+        st.error(f"八维剖析生成失败：{report.error}")
+        if report.raw_json:
+            with st.expander("LLM 原始输出（调试用）"):
+                st.code(report.raw_json)
+        return
+    st.success(f"✅ 八维剖析生成完成（provider: {report.provider}）")
+
+    # 顶部：市场定位
+    st.markdown(f"#### 🎯 市场定位：{report.market_tier}")
+    st.info(report.market_verdict)
+    st.divider()
+
+    # 八维：每维一个子 tab
+    if report.dimensions:
+        dim_tabs = st.tabs([d.dim for d in report.dimensions])
+        for tab, d in zip(dim_tabs, report.dimensions):
+            with tab:
+                left, right = st.columns([1.5, 1])
+                with left:
+                    st.markdown("#### 🔍 定性论证")
+                    for detail in d.details:
+                        st.markdown(f"- {detail}")
+                with right:
+                    df = pd.DataFrame({
+                        "对标对象": ["现役基准", "本案设计"],
+                        d.chart_metric: [d.base_val, d.new_val],
+                    })
+                    fig = px.bar(
+                        df, x=d.chart_metric, y="对标对象", orientation="h",
+                        text=d.chart_metric, color="对标对象",
+                        color_discrete_sequence=["#a9a9a9", "#1f77b4"],
+                        title=d.chart_metric,
+                    )
+                    fig.update_layout(showlegend=False, height=200, margin=dict(l=10, r=10, t=40, b=10))
+                    st.plotly_chart(fig, use_container_width=True)
+
+    if report.summary:
+        st.info(f"**📌 八维小结：** {report.summary}")
+    st.divider()
+
+    # 结案决议
+    if report.grand_verdict is not None:
+        gv = report.grand_verdict
+        st.markdown("### ⚖️ 商业落地决议")
+        st.success(gv.summary)
+        col_pro, col_con = st.columns(2)
+        with col_pro:
+            st.markdown("##### 🌟 核心投产优势")
+            for s in gv.strengths:
+                st.markdown(f"- ✅ {s}")
+        with col_con:
+            st.markdown("##### ⚠️ 致命短板与风险")
+            for w in gv.weaknesses:
+                st.markdown(f"- ❌ {w}")
+
+    if report.reference_sources:
+        st.markdown("#### 📚 数据来源")
+        for ref in report.reference_sources:
+            st.markdown(f"- 🔗 {ref}")
