@@ -313,10 +313,10 @@ def render_laminate_result(laminate_result) -> None:
         return
     st.subheader("复合铺层初筛")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ex", f"{laminate_result.ex_gpa:.3g} GPa")
-    c2.metric("Ey", f"{laminate_result.ey_gpa:.3g} GPa")
-    c3.metric("Gxy", f"{laminate_result.gxy_gpa:.3g} GPa")
-    c4.metric("总厚度", f"{laminate_result.total_thickness_mm:.3g} mm")
+    c1.metric("Ex", f"{laminate_result.ex_gpa.typical:.3g} GPa")
+    c2.metric("Ey", f"{laminate_result.ey_gpa.typical:.3g} GPa")
+    c3.metric("Gxy", f"{laminate_result.gxy_gpa.typical:.3g} GPa")
+    c4.metric("总厚度", f"{laminate_result.total_thickness_mm.typical:.3g} mm")
     st.dataframe(
         pd.DataFrame(laminate_result.a_matrix, columns=["A1", "A2", "A6"]),
         hide_index=True,

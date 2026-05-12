@@ -220,11 +220,11 @@ def _laminate_markdown(laminate_result: LaminateResult | None) -> str:
 ### 4.1 复合铺层初筛
 
 - 方法：{laminate_result.method}
-- 总厚度：{laminate_result.total_thickness_mm:.4g} mm
-- 等效 Ex：{laminate_result.ex_gpa:.4g} GPa
-- 等效 Ey：{laminate_result.ey_gpa:.4g} GPa
-- 等效 Gxy：{laminate_result.gxy_gpa:.4g} GPa
-- 等效 νxy：{laminate_result.nuxy:.4g}
+- 总厚度：{laminate_result.total_thickness_mm.typical:.4g} mm
+- 等效 Ex：{laminate_result.ex_gpa.typical:.4g} GPa
+- 等效 Ey：{laminate_result.ey_gpa.typical:.4g} GPa
+- 等效 Gxy：{laminate_result.gxy_gpa.typical:.4g} GPa
+- 等效 νxy：{laminate_result.nuxy.typical:.4g}
 
 铺层告警：
 
@@ -237,12 +237,12 @@ def _laminate_json(laminate_result: LaminateResult | None) -> dict | None:
         return None
     return {
         "method": laminate_result.method,
-        "total_thickness_mm": laminate_result.total_thickness_mm,
+        "total_thickness_mm": laminate_result.total_thickness_mm.typical,
         "a_matrix": [list(row) for row in laminate_result.a_matrix],
-        "ex_gpa": laminate_result.ex_gpa,
-        "ey_gpa": laminate_result.ey_gpa,
-        "gxy_gpa": laminate_result.gxy_gpa,
-        "nuxy": laminate_result.nuxy,
+        "ex_gpa": laminate_result.ex_gpa.typical,
+        "ey_gpa": laminate_result.ey_gpa.typical,
+        "gxy_gpa": laminate_result.gxy_gpa.typical,
+        "nuxy": laminate_result.nuxy.typical,
         "warnings": list(laminate_result.warnings),
     }
 

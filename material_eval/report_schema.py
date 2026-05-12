@@ -115,8 +115,8 @@ def build_structured_report(
                 section="复合铺层初筛",
                 claim_type="performance",
                 text=(
-                    f"CLT 等效 Ex={laminate_result.ex_gpa:.4g} GPa、"
-                    f"Ey={laminate_result.ey_gpa:.4g} GPa，可作为铺层刚度初筛输入。"
+                    f"CLT 等效 Ex={laminate_result.ex_gpa.typical:.4g} GPa、"
+                    f"Ey={laminate_result.ey_gpa.typical:.4g} GPa，可作为铺层刚度初筛输入。"
                 ),
                 confidence=0.58 if laminate_result.warnings else 0.66,
                 bindings=[
@@ -125,7 +125,7 @@ def build_structured_report(
                         reference_id=laminate_result.method,
                         reference_label="Classical Laminate Theory A matrix",
                         support_level="direct",
-                        value=laminate_result.ex_gpa,
+                        value=laminate_result.ex_gpa.typical,
                         unit="GPa",
                         note="当前未包含失效准则和环境衰减。",
                     )
