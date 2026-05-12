@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 class IntervalError(ValueError):
@@ -28,7 +28,7 @@ class Interval:
     typical: float
     high: float
     unit: str
-    widened: bool = False
+    widened: bool = False  # Set by safe_eval fallback (planned Phase 1 follow-up; not used by Task 1 arithmetic).
 
     def __post_init__(self) -> None:
         if not (self.low <= self.typical <= self.high):
@@ -97,10 +97,19 @@ class Interval:
     def __pow__(self, n: int) -> "Interval":
         if not isinstance(n, int) or n < 1:
             raise IntervalError(f"Only positive integer powers supported, got {n!r}")
-        if self.low >= 0 or n % 2 == 1:
+        if n % 2 == 1:
+            # Odd power is monotone: preserves order
             return Interval(self.low ** n, self.typical ** n, self.high ** n, _pow_unit(self.unit, n))
-        endpoints = (self.low ** n, self.high ** n)
-        return Interval(low=min(endpoints), typical=self.typical ** n, high=max(endpoints), unit=_pow_unit(self.unit, n))
+        if self.low >= 0:
+            return Interval(self.low ** n, self.typical ** n, self.high ** n, _pow_unit(self.unit, n))
+        if self.high <= 0:
+            # All non-positive: even power flips order
+            return Interval(self.high ** n, self.typical ** n, self.low ** n, _pow_unit(self.unit, n))
+        # Mixed-sign: minimum is 0 at x=0, maximum is the larger end raised
+        low_n = 0.0
+        high_n = max(self.low ** n, self.high ** n)
+        # typical**n could still be 0 even if typical != 0 (when typical=0); ensure ordering
+        return Interval(low=low_n, typical=self.typical ** n, high=high_n, unit=_pow_unit(self.unit, n))
 
     def relative_width(self) -> float:
         if self.typical == 0:

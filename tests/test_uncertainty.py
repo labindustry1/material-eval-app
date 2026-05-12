@@ -115,6 +115,55 @@ class IntervalArithmeticTest(unittest.TestCase):
         iv = Interval.point(0.0, "N")
         self.assertEqual(iv.relative_width(), 0.0)
 
+    def test_add_scalar(self):
+        c = self.a + 5.0
+        self.assertEqual((c.low, c.typical, c.high), (6.0, 7.0, 8.0))
+        self.assertEqual(c.unit, "MPa")
+
+    def test_sub_scalar(self):
+        c = self.a - 1.0
+        self.assertEqual((c.low, c.typical, c.high), (0.0, 1.0, 2.0))
+
+    def test_mul_negative_scalar_flips(self):
+        c = self.a * -2.0
+        self.assertEqual((c.low, c.typical, c.high), (-6.0, -4.0, -2.0))
+
+    def test_truediv_negative_scalar_flips(self):
+        c = self.a / -2.0
+        self.assertEqual((c.low, c.typical, c.high), (-1.5, -1.0, -0.5))
+
+    def test_truediv_zero_scalar_raises(self):
+        with self.assertRaises(IntervalError):
+            _ = self.a / 0.0
+
+    def test_pow_zero_or_negative_raises(self):
+        with self.assertRaises(IntervalError):
+            _ = self.a ** 0
+        with self.assertRaises(IntervalError):
+            _ = self.a ** -1
+
+    def test_pow_float_raises(self):
+        with self.assertRaises(IntervalError):
+            _ = self.a ** 2.0  # type: ignore[operator]
+
+    def test_pow_two_on_mixed_sign_uses_zero_min(self):
+        mixed = Interval(low=-2.0, typical=1.0, high=3.0, unit="m")
+        c = mixed ** 2
+        self.assertEqual(c.low, 0.0)
+        self.assertEqual(c.high, 9.0)
+        self.assertEqual(c.typical, 1.0)
+        self.assertEqual(c.unit, "m**2")
+
+    def test_pow_three_on_negative_interval(self):
+        neg = Interval(low=-3.0, typical=-2.0, high=-1.0, unit="m")
+        c = neg ** 3
+        self.assertEqual((c.low, c.typical, c.high), (-27.0, -8.0, -1.0))
+
+    def test_pow_two_on_all_negative(self):
+        neg = Interval(low=-3.0, typical=-2.0, high=-1.0, unit="m")
+        c = neg ** 2
+        self.assertEqual((c.low, c.typical, c.high), (1.0, 4.0, 9.0))
+
 
 class IntervalFormatTest(unittest.TestCase):
     def test_format_large_takes_integer(self):
