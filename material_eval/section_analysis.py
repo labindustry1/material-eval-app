@@ -5,11 +5,13 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable
 
+from material_eval.uncertainty import Interval
+
 
 @dataclass(frozen=True)
 class SectionProperties:
-    area_mm2: float
-    inertia_x_mm4: float
+    area_mm2: Interval
+    inertia_x_mm4: Interval
     inertia_y_mm4: float
     product_inertia_mm4: float
     centroid_x_mm: float
@@ -33,8 +35,8 @@ def _sectionproperties_result(
         inertia_x, inertia_y, product_inertia = section.get_ic()
         centroid_x, centroid_y = section.get_c()
         return SectionProperties(
-            area_mm2=float(section.get_area()),
-            inertia_x_mm4=float(inertia_x),
+            area_mm2=Interval.point(float(section.get_area()), "mm**2"),
+            inertia_x_mm4=Interval.point(float(inertia_x), "mm**4"),
             inertia_y_mm4=float(inertia_y),
             product_inertia_mm4=float(product_inertia),
             centroid_x_mm=float(centroid_x),
@@ -62,8 +64,8 @@ def analyze_hollow_circular_section(outer_diameter: float, thickness: float) -> 
         area = math.pi / 4 * (outer_diameter**2 - inner_diameter**2)
         inertia = math.pi / 64 * (outer_diameter**4 - inner_diameter**4)
         return SectionProperties(
-            area_mm2=area,
-            inertia_x_mm4=inertia,
+            area_mm2=Interval.point(area, "mm**2"),
+            inertia_x_mm4=Interval.point(inertia, "mm**4"),
             inertia_y_mm4=inertia,
             product_inertia_mm4=0.0,
             centroid_x_mm=0.0,
@@ -106,8 +108,8 @@ def analyze_i_section(
             + web_height * effective_web**3 / 12
         )
         return SectionProperties(
-            area_mm2=area,
-            inertia_x_mm4=inertia_x,
+            area_mm2=Interval.point(area, "mm**2"),
+            inertia_x_mm4=Interval.point(inertia_x, "mm**4"),
             inertia_y_mm4=inertia_y,
             product_inertia_mm4=0.0,
             centroid_x_mm=width / 2,
@@ -139,8 +141,8 @@ def analyze_rectangular_section(width: float, depth: float) -> SectionProperties
 
     def fallback(extra_warnings: tuple[str, ...] = ()) -> SectionProperties:
         return SectionProperties(
-            area_mm2=width * depth,
-            inertia_x_mm4=width * depth**3 / 12,
+            area_mm2=Interval.point(width * depth, "mm**2"),
+            inertia_x_mm4=Interval.point(width * depth**3 / 12, "mm**4"),
             inertia_y_mm4=depth * width**3 / 12,
             product_inertia_mm4=0.0,
             centroid_x_mm=width / 2,

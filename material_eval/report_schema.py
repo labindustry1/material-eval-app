@@ -92,7 +92,7 @@ def build_structured_report(
                 claim_id=_claim_id(len(claims) + 1),
                 section="工程初筛结果",
                 claim_type="performance",
-                text=f"{metric.name} 为 {metric.value:.4g} {metric.unit}，用于 {part.name} 的 MVP 初筛。",
+                text=f"{metric.name} 为 {metric.value.typical:.4g} {metric.unit}，用于 {part.name} 的 MVP 初筛。",
                 confidence=0.72 if not calculation.warnings else 0.62,
                 bindings=[
                     ClaimBinding(
@@ -100,7 +100,7 @@ def build_structured_report(
                         reference_id=f"{calculation.version}:{calculation.topology}:metric:{idx}",
                         reference_label=metric.name,
                         support_level="direct",
-                        value=metric.value,
+                        value=metric.value.typical,
                         unit=metric.unit,
                         note=metric.description,
                     )

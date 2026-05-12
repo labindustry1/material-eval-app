@@ -38,7 +38,7 @@ def build_internal_report(
 
     verdict, risks = _verdict(calculation, evidence_cards)
     metrics_md = "\n".join(
-        f"| {metric.name} | {metric.value:.4g} | {metric.unit} | {metric.description} |"
+        f"| {metric.name} | {metric.value.typical:.4g} | {metric.unit} | {metric.description} |"
         for metric in calculation.metrics
     )
     dims_md = "\n".join(f"- {key}: {value:g} mm" for key, value in dimensions.items())
@@ -164,7 +164,15 @@ def build_internal_report(
         "calculation": {
             "version": calculation.version,
             "topology": calculation.topology,
-            "metrics": [metric.__dict__ for metric in calculation.metrics],
+            "metrics": [
+                {
+                    "name": metric.name,
+                    "value": metric.value.typical,
+                    "unit": metric.unit,
+                    "description": metric.description,
+                }
+                for metric in calculation.metrics
+            ],
             "assumptions": list(calculation.assumptions),
             "warnings": list(calculation.warnings),
         },
