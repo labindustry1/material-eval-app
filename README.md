@@ -6,6 +6,17 @@
 
 旧版 RAG 和 SQLite demo 连接器也已移动到 `legacy/`，仅作为历史参考，不再被新 MVP 使用。
 
+## 给接手者的入口
+
+如果你是下一位接手的人，建议先读：
+
+1. `docs/HANDOFF.md`：30 分钟交接指南，包含启动、验收、模块地图和下一步。
+2. `docs/implementation-log.md`：完整实施记录，包含 Phase 1/2 的设计决策和测试基线。
+3. `docs/material-eval-refactor-prd.md`：重构 PRD 和业务边界。
+4. `docs/target-architecture-v1.md`：目标架构。
+
+当前项目已经不是旧 demo，而是可继续迭代的内部研发 MVP。后续不要直接在 `app.py` 堆逻辑，应优先在 `material_eval/` 的领域模块里扩展，再通过 `evaluation.py` 和 `ui_streamlit.py` 接入。
+
 ## 技术栈
 
 - UI：Streamlit
@@ -91,8 +102,13 @@ material_eval/
   materials.py        # 材料候选与复合材料初筛估算
   material_property_library.py # 材料属性、来源、条件、置信度 seed 读取
   units.py            # Pint 单位归一化与量纲校验
+  uncertainty.py      # 区间不确定度、适用域 envelope
+  conditions.py       # 工况条件与单位归一化
   laminates.py        # Classical Laminate Theory 铺层初筛
   computation.py      # BEAM/PLATE/STRAP 等确定性计算模块
+  stress_analysis.py  # 基于结构拓扑反算应力
+  strength.py         # 材料许用强度和安全系数模型
+  failure_criteria.py # von Mises / Tsai-Wu 失效准则
   section_analysis.py # sectionproperties 截面几何分析适配器
   ingestion.py        # Docling/纯文本资料解析
   embeddings.py       # BGE-M3 dense embedding 适配器
@@ -103,6 +119,10 @@ material_eval/
   reporting.py        # 中文内部研发报告生成
   report_schema.py    # Pydantic 结构化报告、claim 和来源绑定
   scoring.py          # 透明规则化评分卡
+  alternatives.py     # refusal 后的替代材料和缺失数据提示
+  web_search.py       # 可选 Tavily 网络检索适配
+  llm_provider.py     # 可选 LLM 分析适配
+  eight_dim_analysis.py # 商业八维剖析
   storage.py          # SQLite 评估记录和报告复核
   ui_streamlit.py     # Streamlit 页面表单和渲染
   openai_provider.py  # 可选 OpenAI 润色
@@ -119,13 +139,16 @@ tests/
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 -m compileall material_eval app.py tests
 ```
 
 ## 当前边界
 
 - 当前结果是内部研发初筛，不构成量产、认证、准入或客户承诺。
 - 当前没有真实 CAE 仿真，图表只是确定性计算结果可视化。
-- 复合材料当前只使用线性混合定律，未考虑铺层、界面、孔隙率、疲劳和环境衰减。
+- 复合材料已接入 CLT 和 Tsai-Wu 初筛，但 Hashin 分模式失效、面外弯矩、屈曲、疲劳和真实 CAE 仍未完成。
+- 材料 seed 中仍有工程默认值，必须逐步替换为供应商、内部实验或标准来源。
+- 透明评分卡是规则化 MVP，权重和阈值需要业务专家用真实项目校准。
 
 ## 已接入的开源能力
 
@@ -143,11 +166,13 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 - 基准材料属性库：已提供 12 个基准材料和 37 条属性观察，包含单位、测试条件、来源标签和置信度，并接入 Streamlit 材料输入；读取时会生成计算用 canonical value/canonical unit。
 - 结构化结论追踪：报告中每条 claim 会绑定计算指标、证据卡、铺层结果或人工规则判断。
 - 透明评分卡：报告中输出数据可信度、本征性能、结构适配、工况风险、工艺成熟度、合规/准入风险，并写入 JSON。
+- 适用域 refusal：材料 envelope 越界时会拒绝出数，并记录 refusal log，避免“明知越界还给结论”。
+- 安全性评估：金属/塑料走 von Mises，复合材料可走 Tsai-Wu；无许用数据时优雅降级。
 
 ## 下一批开源能力接入顺序
 
-1. Claim binding 细化：绑定到具体证据片段、计算变量、人工判断记录。
-2. `SfePy / CalculiX / OpenRadioss`：接真实仿真 worker。
+1. Hashin 分模式失效准则：说明 fiber/matrix 哪个模式先坏。
+2. Claim binding 细化：绑定到具体证据片段、计算变量、人工判断记录。
 3. RAG 评估增强：展示失败样本、期望来源、召回来源和方法对比趋势。
 4. 报告审核流增强：证据卡人工确认、结论状态和研发复核意见。
 5. Supabase adapter：把当前 SQLite repository 切出正式版实现。
