@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+data/artifacts/
+data/*.sqlite3
+*.log
+
+# Playwright MCP temp files
+.playwright-mcp/
+*.png
